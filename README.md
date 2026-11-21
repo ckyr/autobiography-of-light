@@ -36,6 +36,7 @@ Open it in any text editor. Leave out or empty any field you don't need: empty f
 ```
 {
   "title": "Andromeda Galaxy",
+  "id": "m31",
   "designation": "M31",
   "date": "2025-10-12",
   "distance_ly": 2500000,
@@ -52,7 +53,7 @@ Open it in any text editor. Leave out or empty any field you don't need: empty f
 | Field | Meaning |
 |---|---|
 | `title` | Name shown on the site. If missing, the designation or file name is used. |
-| `id` | Optional unique id, used for the file names and for removing. Default: made from the title. Adding a photo with an existing id replaces it. Give a different title or `id` to keep two photos of the same object. |
+| `id` | The photo's internal name. It is not shown on the website. It is used for the file names (`photos/<id>.jpg`), as the key in `catalog.json`, and by `--remove`. If you leave it empty it is made from the title ("Andromeda Galaxy" becomes `andromeda-galaxy`). Two photos with the same id are treated as the same photo: adding the second replaces the first. To keep several photos of one object, give each its own `id`. `_template.json` has an `id` line at the bottom; `_example_m31.json` does not, so add a line such as `"id": "m31",` yourself. See "Photo ids, editing and adding more photos of the same object" below. |
 | `designation` | Catalog name such as M31, NGC 7000 or Caldwell 20. Shown under the thumbnail on the sky and used to look up the object. |
 | `date` | Capture date as YYYY-MM-DD. If empty, the photo's EXIF date is used (Lightroom exports include it unless you turned metadata off). |
 | `hint` | An object name used to tell astrometry.net roughly where to look. Defaults to the designation. |
@@ -72,7 +73,7 @@ Open it in any text editor. Leave out or empty any field you don't need: empty f
 Details also appear on the site automatically: the field of view (the arc on the sky) comes from the solve, and the position is shown in right ascension and declination.
 
 ### Command line options
-Every field above can also be given on the command line, with `--` and dashes instead of underscores, for example `--distance-ly 2500000 --exposure-seconds 12000 --location "My backyard"`. Command line values win over the JSON file.
+Every field above can also be given on the command line, with `--` and dashes instead of underscores, for example `--id m31-wide --distance-ly 2500000 --exposure-seconds 12000 --location "My backyard"`. Command line values win over the JSON file.
 
 | Command | What it does |
 |---|---|
@@ -83,7 +84,46 @@ Every field above can also be given on the command line, with `--` and dashes in
 | `python3 tools/add_photo.py --remove ID` | Removes a photo: its catalog entry, web copy and thumbnail. |
 | `python3 tools/add_photo.py --remove-samples` | Removes all the sample photos. |
 | `--max-size 2400` | Longest side of the web copy in pixels (default 2400). |
-| `--push` | After the change, runs `git add -A`, `git commit` and `git push` (needs the setup in section 6). |
+| `--push` | After the change, runs `git add -A`, `git commit` and `git push` (needs the setup in section 6). It does not pull first, so if GitHub rejects the push, follow Option 2 in "Publishing updates" (section 6). |
+
+### Photo ids, editing and adding more photos of the same object
+**What the id is.** Every photo has an `id`, its internal name. It is what the script uses to decide whether a photo is new or already exists. It comes from the `id` field of the JSON file (or `--id` on the command line). If that is empty, it is made from the **title**: lower case, with spaces and symbols turned into dashes, so the title "Andromeda Galaxy" gives `andromeda-galaxy`. It does not come from the file name (`m31.jpg` or `m31-wide.jpg` make no difference) and not from the designation. The id appears in the log when a photo is added (`Added 'Andromeda Galaxy' (id andromeda-galaxy)`), in `python3 tools/add_photo.py --list`, and as the `"id"` line of each entry in `catalog.json`.
+
+**Rule: same id means same photo.** If you add a photo whose id already exists, the new one replaces the old one (image, thumbnail and all the details). The script does not warn you.
+
+| You want to... | Do this |
+|---|---|
+| Add a photo of an object you have not photographed before | Import it as usual. The id is made from the title. |
+| Add another photo of an object you already have, and keep both | The same title and designation are fine, but give the new photo its own `id`. |
+| Fix a typo, or change the story, distance, location and so on of a photo that is already on the site | Edit `catalog.json` directly (below). |
+| Replace the picture itself, for example with a better Lightroom export | Import again with the same `id` (below). |
+| Delete a photo | `python3 tools/add_photo.py --remove ID` |
+
+**Adding another photo of the same object.** Give each photo of the object a different id and keep the title as the object's name. For example:
+
+`import/m31.json`:
+```
+{ "title": "Andromeda Galaxy", "designation": "M31", "id": "m31-2025-10", "date": "2025-10-12" }
+```
+`import/m31-wide.json`:
+```
+{ "title": "Andromeda Galaxy", "designation": "M31", "id": "m31-wide-2026", "date": "2026-09-20" }
+```
+Any short name made of letters, numbers and dashes works. A good habit is to give every photo an id from the start, such as the designation plus the year or a word that tells the photos apart. Both photos then appear in the gallery with the same title. On the sky, photos of the same object share one marker with a count until you zoom in, and clicking it lets you choose (see section 9). If you forget the id, the second photo silently replaces the first. Check with `--list` that you see both.
+
+**Changing the text of a photo that is already on the site.** This is the easiest case, and it needs no new solve:
+1. Open `catalog.json` in a text editor and find the photo, by searching for its title or its `"id"`.
+2. Change the value you want, for example the text after `"story":`. Keep the quotes and commas, and write paragraph breaks as `\n\n`. Do not touch the automatic fields (`image`, `thumb`, `v`, `ra`, `dec`, `width_deg`, `height_deg`, `rotation`) unless you know what you are doing.
+3. Save. If the site then shows nothing, a comma or quote is probably wrong. Run `python3 -m json.tool catalog.json > /dev/null` (on Windows: `python -m json.tool catalog.json > NUL`). It prints nothing if the file is fine, and an error with a line number if not.
+4. Check it locally (section 4), then publish (section 6).
+
+You can add a field that the photo does not have yet in the same way, with the same names as in the table above, for example `"location": "My backyard",` (and a comma after every line except the last one in the entry).
+
+**Replacing the picture itself.** Import again with the same id:
+1. Put the new JPEG in `import/`. For the JSON file, copy the old one back from `import/done/` (if you kept it) and edit it, or write a new one.
+2. Set `"id"` to the id of the photo you are replacing. Use `--list` to look it up. If you never gave it an id, it is the title in lower case with dashes. If you also change the title, you must set the id explicitly, otherwise a new photo is created.
+3. Include every field again. The entry is rebuilt from the JSON file, so anything you leave out (location, story, distance and so on) is lost, except what is filled in automatically.
+4. Run `python3 tools/add_photo.py --all`. The old image and thumbnail are overwritten, and the photo is solved again.
 
 ### Object type, Messier and Caldwell
 astrometry.net only provides the position, so the script gets the object type and the Messier and Caldwell numbers from OpenNGC, a catalog included in `tools/catalog.json`. It looks for a name in the designation, hint or title (M, NGC, IC, Messier, Caldwell), and otherwise takes the catalog object closest to the centre of the image. The log shows what was matched; if it is wrong, set `object_type`, `messier` or `caldwell` in the JSON file. Things not in OpenNGC, such as Sharpless, Barnard or LDN objects, get no type automatically: set `object_type` yourself. The Gallery tab can then filter by type and by Messier or Caldwell, and sort by catalog number. Objects OpenNGC lists as clusters with nebulosity are labelled "Emission nebula".
@@ -98,7 +138,7 @@ Run `python3 tools/add_photo.py --list` to see the ids, then `python3 tools/add_
 ```
 python3 tools/add_photo.py --remove-samples
 ```
-Removing only changes your local folder. Publish again for it to disappear from the website. To change a title, story or distance, edit `catalog.json` directly or add the photo again with the same id.
+Removing only changes your local folder. Publish again for it to disappear from the website. To change the text of a photo, or to replace its picture, see "Photo ids, editing and adding more photos of the same object" in section 2.
 
 ## 4. View the site on your computer
 In this folder run `python3 tools/serve.py` (on Windows: `python`), then open http://localhost:8000. Stop it with Ctrl+C. This server tells the browser not to cache anything, so you always see your latest changes. (Opening `index.html` directly does not work, because browsers block it from loading the data files, and the plain `python3 -m http.server` lets the browser keep old copies.)
@@ -137,17 +177,38 @@ git push -u origin main
 4. The site appears at https://YOUR-USERNAME.github.io/autobiography-of-light/ after a minute or two.
 
 ### Publishing updates
-After adding or removing photos, `catalog.json` and the files in `photos/` have changed. Publish with `--push` on the script, or by hand:
+After adding, editing or removing photos, `catalog.json` and the files in `photos/` have changed. Publish with `--push` on the script, or by hand with one of the two options below.
+
+**Option 1: regular update.** Use this when nothing has changed on GitHub's side:
 ```
 git add -A
 git commit -m "Add Andromeda"
 git push
 ```
+
+**Option 2: update after something changed on GitHub.** If the push fails with `! [rejected] main -> main (fetch first)` and "Updates were rejected because the remote contains work that you do not have locally", GitHub's copy of your branch has a commit that your computer does not have. This happens when something was committed on GitHub itself: changing or removing the custom domain in Settings, Pages (GitHub then adds or deletes the `CNAME` file by making a commit), editing a file in the browser, or pushing from another computer. Fix it by bringing those commits in first:
+```
+git add -A
+git commit -m "Add Andromeda"
+git pull --rebase
+git push
+```
+If you already committed (for example because `--push` ran and then failed), skip the first two lines and run just `git pull --rebase` and `git push`. `git pull --rebase` downloads GitHub's commits and puts yours after them.
+
+To see what GitHub has that you do not, run `git fetch` and then `git log HEAD..origin/main --stat`.
+
+Notes for Option 2:
+- If a text editor opens asking for a message, you ran plain `git pull` instead of `git pull --rebase`. Save and close it (in vim, type `:wq` and press Enter).
+- If git reports a conflict, run `git status` to see the files. Open each one, look for the lines `<<<<<<<`, `=======` and `>>>>>>>`, keep the content you want (for `catalog.json`, keep the entries from both sides and make sure the commas are right), and delete those marker lines. Then run `git add FILE` and `git rebase --continue`. To cancel and return to where you were, run `git rebase --abort`.
+- Never use `git push --force` to get around the error. It overwrites what is on GitHub.
+- After pulling, check that the `CNAME` file still contains `atlas.ckyr.us` and that the custom domain is still set in Settings, Pages. If you removed the domain in the settings, GitHub deleted the file: enter the domain again in the settings (GitHub creates the file again), run `git pull --rebase`, and then continue.
+- Optional: run `git config pull.rebase true` once, so a plain `git pull` always works this way. Running `git pull --rebase` before every push is harmless: if nothing changed on GitHub it does nothing.
+
 GitHub rebuilds the site by itself after each push, and the change is live in about a minute. There is no separate publish step. Refresh the page to see it. Deleted photos remain in git history, so the repository slowly grows.
 
 ### Use atlas.ckyr.us (Cloudflare DNS)
 1. Push the project with the `CNAME` file (already contains `atlas.ckyr.us`).
-2. On GitHub: repository Settings, Pages, Custom domain, enter `atlas.ckyr.us`, Save.
+2. On GitHub: repository Settings, Pages, Custom domain, enter `atlas.ckyr.us`, Save. Changing or removing the custom domain later makes GitHub commit to your repository (it adds or deletes the `CNAME` file), so use Option 2 under "Publishing updates" for your next push.
 3. In the Cloudflare dashboard, open the DNS records for ckyr.us and add: Type `CNAME`, Name `atlas`, Target `YOUR-USERNAME.github.io` (without the repository name), Proxy status "DNS only" (grey cloud). If a record named `atlas` already exists, delete it first.
 4. Back in GitHub Pages settings, wait for the DNS check to succeed, then tick "Enforce HTTPS". The certificate can take up to an hour.
 5. Optional: you can then turn Cloudflare's proxy (orange cloud) on if you want Cloudflare caching. If you do, set Cloudflare's SSL/TLS mode to "Full".

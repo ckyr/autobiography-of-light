@@ -68,7 +68,7 @@ body:not([data-tab=cosmos]) :is(#sky,#ctl,#hint){display:none}
 <header><div><h1>the autobiography of light</h1><p class="by">photos by <a href="https://www.instagram.com/the.autobiography.of.light/" target="_blank" rel="noopener noreferrer" title="the.autobiography.of.light on Instagram">Christos Kyratsous</a></p></div>
 <nav><button id="t-cosmos" aria-current="true">Cosmos</button><button id="t-gallery">Gallery</button></nav></header>
 <canvas id="sky" aria-label="Interactive map of the cosmos with astrophotographs"></canvas>
-<div id="ctl"><label><input type="checkbox" id="o-photos" checked>Photos</label><label><input type="checkbox" id="o-lines" checked>Constellations</label><label><input type="checkbox" id="o-names" checked>Names</label><label><input type="checkbox" id="o-grid">Grid</label><button id="reset">Reset view</button></div>
+<div id="ctl"><label><input type="checkbox" id="o-photos" checked>Photos</label><label><input type="checkbox" id="o-lines" checked>Constellations</label><label><input type="checkbox" id="o-names" checked>Names</label><label><input type="checkbox" id="o-grid" checked>Grid</label><button id="reset">Reset view</button></div>
 <div id="hint">Drag to look around, scroll or pinch to zoom, click a photograph.</div>
 <div id="tip"></div><div id="pick"></div>
 <main id="gal"><div class="search"><input type="search" id="q" placeholder="Search by name, object, place, telescope or story" aria-label="Search photographs" autocomplete="off" spellcheck="false"></div><div class="bar"><span id="count"></span><span class="filters">
@@ -79,10 +79,10 @@ body:not([data-tab=cosmos]) :is(#sky,#ctl,#hint){display:none}
 <p class="credit">Milky Way: NASA Scientific Visualization Studio, Deep Star Maps 2020. Stars and constellation figures: d3-celestial by Olaf Frohn (BSD-3-Clause). Object types and Messier and Caldwell numbers: OpenNGC (CC-BY-SA 4.0). Coordinates are J2000.</p></main>
 <div id="lb" role="dialog" aria-modal="true" aria-label="Photograph"><div class="pic"><div id="lb-img" role="img"></div></div><aside id="lb-info"></aside></div>
 <script>
-const V='5',D=Math.PI/180,$=s=>document.querySelector(s),SERIF='"Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif',MIN=58;
+const V='6',D=Math.PI/180,$=s=>document.querySelector(s),SERIF='"Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif',MIN=58;
 const cv=$('#sky'),ctx=cv.getContext('2d'),ptrs=new Map(),imgs={},calm=matchMedia('(prefers-reduced-motion:reduce)').matches;
 let sky,cat=[],W,H,R,dpr=1,s0,c0,hits=[],drag=null,pd=0,lbItem=null;
-const view={ra:300,dec:35,fov:100},home={...view},opts={photos:true,lines:true,names:true,grid:false},clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+const view={ra:300,dec:35,fov:100},home={...view},opts={photos:true,lines:true,names:true,grid:true},clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
 const esc=s=>String(Array.isArray(s)?s.join(', '):s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const U=(e,k)=>e[k]+(e.v?'?v='+e.v:'');
 function img(u){let i=imgs[u];if(!i){i=imgs[u]=new Image();i.onload=draw;i.src=u}return i.complete&&i.naturalWidth?i:null}
@@ -90,12 +90,14 @@ function img(u){let i=imgs[u];if(!i){i=imgs[u]=new Image();i.onload=draw;i.src=u
 function P(ra,dec){const dl=(ra-view.ra)*D,p=dec*D,cp=Math.cos(p),sp=Math.sin(p),cd=Math.cos(dl),den=1+s0*sp+c0*cp*cd;
  if(den<.2)return null;const k=2*R/den;return[W/2-k*cp*Math.sin(dl),H/2-k*(c0*sp-s0*cp*cd)]}
 function path(rings){for(const ring of rings){let pen=false;for(const[a,b]of ring){const p=P(a,b);if(!p){pen=false;continue}pen?ctx.lineTo(p[0],p[1]):ctx.moveTo(p[0],p[1]);pen=true}}}
-const MWG=1.0;let mwT,mwW,mwH,off,offc;const mwI=new Image();
-mwI.onload=()=>{const c=document.createElement('canvas');mwW=c.width=mwI.width;mwH=c.height=mwI.height;const x=c.getContext('2d');x.drawImage(mwI,0,0);mwT=x.getImageData(0,0,mwW,mwH).data;draw()};mwI.src='data/milkyway.jpg?v='+V;
+const MWG=1.0;let mwT,mwW,mwH,hq=false,hqT=0;const offs=[];const mwI=new Image();
+mwI.onload=()=>{mwW=mwI.width;mwH=mwI.height;const sw=1024,c=document.createElement('canvas'),x=c.getContext('2d',{willReadFrequently:true}),T=new Uint8ClampedArray(mwW*mwH*4);
+ for(let x0=0;x0<mwW;x0+=sw){const w=Math.min(sw,mwW-x0);c.width=w;c.height=mwH;x.drawImage(mwI,x0,0,w,mwH,0,0,w,mwH);const d=x.getImageData(0,0,w,mwH).data;for(let y=0;y<mwH;y++)T.set(d.subarray(y*w*4,(y+1)*w*4),(y*mwW+x0)*4)}
+ mwT=T;draw()};mwI.src='data/milkyway.jpg?v='+V;
 // Draws the Milky Way photograph by inverting the projection for every pixel (rendered at low resolution, then scaled up).
-function drawMW(){if(!mwT)return;const sc=.4,w=Math.ceil(W*sc),h=Math.ceil(H*sc);
- if(!off||off.width!=w||off.height!=h){off=document.createElement('canvas');off.width=w;off.height=h;offc=off.getContext('2d')}
- const id=offc.createImageData(w,h),o=id.data,bil=view.fov<40;let n=0;
+function drawMW(){if(!mwT)return;const sc=hq?clamp(Math.sqrt(1.6e6/(W*H)),.4,.9):.4,w=Math.ceil(W*sc),h=Math.ceil(H*sc),ki=hq?1:0;
+ let off=offs[ki];if(!off||off.width!=w||off.height!=h){off=offs[ki]=document.createElement('canvas');off.width=w;off.height=h}const offc=off.getContext('2d');
+ const id=offc.createImageData(w,h),o=id.data,bil=hq||view.fov<40;let n=0;
  for(let j=0;j<h;j++){const eta=H/2-(j+.5)/sc;for(let i=0;i<w;i++,n+=4){const xi=W/2-(i+.5)/sc,rho=Math.hypot(xi,eta),c=2*Math.atan(rho/(2*R)),sc_=Math.sin(c),cc=Math.cos(c);
   const ph=Math.asin(clamp(cc*s0+(rho?eta*sc_*c0/rho:0),-1,1)),dl=Math.atan2(xi*sc_,rho*c0*cc-eta*s0*sc_);
   const ra=((view.ra+dl/D)%360+360)%360;o[n+3]=255;
@@ -113,6 +115,7 @@ function drawMarker(e,x,y,badge,label){const ar=e.width_deg/e.height_deg,mw=ar>=
  return Math.max(mw,mh)/2+4}
 function draw(){
  if(!sky||!W)return;ctx.setTransform(dpr,0,0,dpr,0,0);
+ if(!hq){clearTimeout(hqT);hqT=setTimeout(()=>{if(document.body.dataset.tab=='cosmos'){hq=true;try{draw()}finally{hq=false}}},250)}   // idle: redraw the Milky Way at higher quality
  const g=ctx.createRadialGradient(W/2,H/2,0,W/2,H/2,Math.max(W,H)*.7);g.addColorStop(0,'#0a1020');g.addColorStop(1,'#03050a');ctx.fillStyle=g;ctx.fillRect(0,0,W,H);
  s0=Math.sin(view.dec*D);c0=Math.cos(view.dec*D);R=Math.min(W,H)/(4*Math.tan(view.fov*D/4));
  drawMW();

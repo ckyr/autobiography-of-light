@@ -275,7 +275,7 @@ Serving a static site is mostly reading, which SD cards handle fine. Failures co
 The site discourages casual saving: no right-click menu or dragging on photos, and the large view is a background image rather than a normal image. This cannot stop determined people, because any image a browser shows can be saved with developer tools or a screenshot. The practical protections are showing a smaller copy (use `--max-size 1600`), and adding a watermark (ask Claude to add this option). The website only ever contains the resized copies, never your originals.
 
 ## Using the site
-**Cosmos tab.** Drag to look around, scroll or pinch to zoom, and click a photograph to open its details. The checkboxes at the bottom left switch Photos, Constellations, Names and Grid on and off (turn Photos off to read the constellation names behind them), and "Reset view" returns to the start. In the photo details, "Show on cosmos" flies to the photo's position.
+**Cosmos tab.** Drag to look around, scroll or pinch to zoom, and click a photograph to open its details. The checkboxes at the bottom left switch Photos, Constellations, Names and Grid on and off (the grid starts switched on) (turn Photos off to read the constellation names behind them), and "Reset view" returns to the start. In the photo details, "Show on cosmos" flies to the photo's position.
 
 **Gallery tab.** The search box at the top filters as you type: it looks at the title, designation, object type, location, telescope, filters, constellation, date, wiki text and distance, and understands catalog numbers such as `m31` or `caldwell 20`. It works together with the Catalog and Type filters and the Sort menu (including closest first by distance and by catalog number).
 
@@ -286,6 +286,9 @@ The site discourages casual saving: no right-click menu or dragging on photos, a
 ## 9. In the Cosmos tab: many photos close together
 Photos too small to show at true size appear as thumbnails. Neighbouring thumbnails merge into one marker with a count badge. Clicking it zooms in to separate different objects, or opens a list when the photos are of the same object. Zoomed in, photos are drawn at their real size and rotation, and clicking where several overlap opens the same list.
 
+## Changing the Milky Way image
+Two ready-made versions of `data/milkyway.jpg` exist: option A (4096x2048, about 0.7 MB) and option B (6144x3072, about 1.3 MB, more detail but about twice the memory in the browser, roughly 75 MB). To switch, copy the one you want into the `data` folder, name it exactly `milkyway.jpg` (replacing the old one), and push. To make visitors and your own browser pick up the new image immediately, also change `const V='6'` in `index.html` to a new value such as `'7'`. Test option B on your phone before publishing it: if the Milky Way background disappears there, go back to option A. When you stop moving, the page redraws the Milky Way at a higher quality, so it looks sharper at rest than while dragging.
+
 ## Wiki text and credits
 Crediting a source does not give you permission to copy it. Text on websites such as Telescopius is normally protected by copyright, and I could not find their terms of use to check what reuse they allow. The safest approach is to use such pages as reference and write the wiki text in your own words, or to ask the site for permission. Facts such as distances and sizes are free to use; the wording is what is protected. If you do adapt text that comes with a licence that allows it (Wikipedia text is CC BY-SA 4.0, which requires credit and that your adaptation is shared under the same licence), put the credit in the `story_credit` field and it appears under the wiki text. There is no need to add anything to the site-wide credits for the wiki text.
 
@@ -294,5 +297,5 @@ Browsers keep copies of files, which is why a refresh was needed while you teste
 
 ## Data credits
 - `data/sky.json` is derived from d3-celestial by Olaf Frohn (BSD-3-Clause, https://github.com/ofrohn/d3-celestial): about 41,000 stars down to magnitude 8, constellation lines and names. Fainter stars appear as you zoom in.
-- `data/milkyway.jpg` is made from the Milky Way background of Deep Star Maps 2020 by NASA's Scientific Visualization Studio (https://svs.gsfc.nasa.gov/4851), tone-mapped and resized to 4096x2048 with RA 0h at the left edge.
+- `data/milkyway.jpg` is made from the Milky Way background of Deep Star Maps 2020 by NASA's Scientific Visualization Studio (https://svs.gsfc.nasa.gov/4851), tone-mapped, cleaned of faint-star grain and resized (4096x2048 or 6144x3072, see "Changing the Milky Way image") with RA 0h at the left edge.
 - `tools/catalog.json` is derived from OpenNGC by Mattia Verga (CC-BY-SA 4.0, https://github.com/mattiaverga/OpenNGC): object types and Messier and Caldwell numbers.

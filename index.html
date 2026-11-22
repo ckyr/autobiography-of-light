@@ -2,7 +2,7 @@
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>the autobiography of light</title>
-<meta name="description" content="Deep-sky photographs by Christos Kyratsous, placed where they sit in the sky.">
+<meta name="description" content="Deep-sky photographs by Christos Kyratsous, placed where they sit in the cosmos.">
 <style>
 :root{--bg:#04060c;--ink:#e9e5d8;--dim:#8a95b0;--line:#1c2438;--serif:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif}
 *{box-sizing:border-box}
@@ -14,6 +14,7 @@ header{position:fixed;inset:0 0 auto 0;z-index:5;display:flex;justify-content:sp
 header>*{pointer-events:auto}
 h1{margin:0;font:italic 400 clamp(1.3rem,3.2vw,1.9rem)/1.1 var(--serif)}
 .by{margin:.25rem 0 0;font:.8rem/1.2 var(--serif);color:var(--dim)}
+.by a{color:inherit;text-decoration:underline;text-decoration-color:#4a5575;text-underline-offset:2px}.by a:hover,.by a:focus-visible{color:var(--ink)}
 nav{padding-top:.3rem}
 nav button{background:none;border:0;border-bottom:1px solid transparent;color:var(--dim);padding:.15rem 0;margin-left:1.3rem;cursor:pointer}
 nav button[aria-current=true]{color:var(--ink);border-color:var(--ink)}
@@ -31,7 +32,7 @@ nav button[aria-current=true]{color:var(--ink);border-color:var(--ink)}
 #pick span{font:.95rem/1.2 var(--serif)}#pick small{display:block;color:var(--dim);font:.75rem system-ui}
 #gal{position:fixed;inset:0;display:none;overflow:auto;padding:5.5rem 1.4rem 2.5rem}
 body[data-tab=gallery] #gal{display:block}
-body:not([data-tab=sky]) :is(#sky,#ctl,#hint){display:none}
+body:not([data-tab=cosmos]) :is(#sky,#ctl,#hint){display:none}
 .search{max-width:1400px;margin:0 auto 1rem}
 .search input{width:min(100%,30rem);background:#0a0f1d;border:1px solid var(--line);border-radius:3px;padding:.5rem .8rem;color:var(--ink);font:inherit}
 .search input::placeholder{color:#6c7894}
@@ -63,10 +64,10 @@ body:not([data-tab=sky]) :is(#sky,#ctl,#hint){display:none}
 @media(max-width:760px){#lb{grid-template-columns:1fr;grid-template-rows:minmax(0,1fr) auto}#lb aside{padding-top:0;max-height:48vh}#hint{display:none}}
 @media(prefers-reduced-motion:reduce){#hint{transition:none}}
 </style></head>
-<body data-tab="sky">
-<header><div><h1>the autobiography of light</h1><p class="by">photos by Christos Kyratsous</p></div>
-<nav><button id="t-sky" aria-current="true">Sky</button><button id="t-gallery">Gallery</button></nav></header>
-<canvas id="sky" aria-label="Interactive map of the sky with astrophotographs"></canvas>
+<body data-tab="cosmos">
+<header><div><h1>the autobiography of light</h1><p class="by">photos by <a href="https://www.instagram.com/the.autobiography.of.light/" target="_blank" rel="noopener noreferrer" title="the.autobiography.of.light on Instagram">Christos Kyratsous</a></p></div>
+<nav><button id="t-cosmos" aria-current="true">Cosmos</button><button id="t-gallery">Gallery</button></nav></header>
+<canvas id="sky" aria-label="Interactive map of the cosmos with astrophotographs"></canvas>
 <div id="ctl"><label><input type="checkbox" id="o-photos" checked>Photos</label><label><input type="checkbox" id="o-lines" checked>Constellations</label><label><input type="checkbox" id="o-names" checked>Names</label><label><input type="checkbox" id="o-grid">Grid</label><button id="reset">Reset view</button></div>
 <div id="hint">Drag to look around, scroll or pinch to zoom, click a photograph.</div>
 <div id="tip"></div><div id="pick"></div>
@@ -78,7 +79,7 @@ body:not([data-tab=sky]) :is(#sky,#ctl,#hint){display:none}
 <p class="credit">Milky Way: NASA Scientific Visualization Studio, Deep Star Maps 2020. Stars and constellation figures: d3-celestial by Olaf Frohn (BSD-3-Clause). Object types and Messier and Caldwell numbers: OpenNGC (CC-BY-SA 4.0). Coordinates are J2000.</p></main>
 <div id="lb" role="dialog" aria-modal="true" aria-label="Photograph"><div class="pic"><div id="lb-img" role="img"></div></div><aside id="lb-info"></aside></div>
 <script>
-const V='4',D=Math.PI/180,$=s=>document.querySelector(s),SERIF='"Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif',MIN=58;
+const V='5',D=Math.PI/180,$=s=>document.querySelector(s),SERIF='"Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif',MIN=58;
 const cv=$('#sky'),ctx=cv.getContext('2d'),ptrs=new Map(),imgs={},calm=matchMedia('(prefers-reduced-motion:reduce)').matches;
 let sky,cat=[],W,H,R,dpr=1,s0,c0,hits=[],drag=null,pd=0,lbItem=null;
 const view={ra:300,dec:35,fov:100},home={...view},opts={photos:true,lines:true,names:true,grid:false},clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
@@ -117,11 +118,11 @@ function draw(){
  drawMW();
  if(opts.grid)drawGrid();
  if(opts.lines){ctx.strokeStyle='rgba(140,170,235,.55)';ctx.lineWidth=1;ctx.beginPath();for(const f of sky.lines)path(f);ctx.stroke()}
- const z=Math.log2(110/view.fov),lim=clamp(4.4+z*1.2,3.5,6.2),zf=clamp(1+.3*z,.7,3);
- for(const[a,b,m,bv]of sky.stars){if(m>lim)continue;const p=P(a,b);if(!p||p[0]<-5||p[0]>W+5||p[1]<-5||p[1]>H+5)continue;
-  ctx.fillStyle=bv<.3?'#cfe0ff':bv<.8?'#fff3dc':'#ffcf9a';ctx.globalAlpha=Math.min(1,.45+(6.5-m)*.2);ctx.beginPath();ctx.arc(p[0],p[1],Math.max(.55,(6.4-m)*.42*zf),0,6.283);ctx.fill()}
+ const z=Math.log2(110/view.fov),lim=clamp(4.4+z*1.3,3.5,8),zf=clamp(1+.3*z,.7,3);
+ for(const[a,b,m,bv]of sky.stars){if(m>lim)break;const p=P(a,b);if(!p||p[0]<-5||p[0]>W+5||p[1]<-5||p[1]>H+5)continue;
+  ctx.fillStyle=bv<.3?'#cfe0ff':bv<.8?'#fff3dc':'#ffcf9a';ctx.globalAlpha=Math.max(.22,Math.min(1,.45+(6.5-m)*.2));ctx.beginPath();ctx.arc(p[0],p[1],Math.max(.55,(6.4-m)*.42*zf),0,6.283);ctx.fill()}
  ctx.globalAlpha=1;
- if(opts.names){ctx.font='italic 13px '+SERIF;ctx.fillStyle='rgba(185,200,235,.85)';ctx.shadowColor='#000';ctx.shadowBlur=4;ctx.textAlign='center';for(const[n,a,b]of sky.names){const p=P(a,b);if(p&&p[0]>0&&p[0]<W&&p[1]>0&&p[1]<H)ctx.fillText(n,p[0],p[1])}ctx.shadowBlur=0}
+ if(opts.names){ctx.font='italic 15px '+SERIF;ctx.fillStyle='rgba(185,200,235,.85)';ctx.shadowColor='#000';ctx.shadowBlur=4;ctx.textAlign='center';for(const[n,a,b]of sky.names){const p=P(a,b);if(p&&p[0]>0&&p[0]<W&&p[1]>0&&p[1]<H)ctx.fillText(n,p[0],p[1])}ctx.shadowBlur=0}
  hits=[];const big=[],small=[];
  for(const e of opts.photos?cat:[]){const p=P(e.ra,e.dec),q=P(e.ra,Math.min(89.9,e.dec+.05));if(!p||!q)continue;
   const nx=q[0]-p[0],ny=q[1]-p[1],sc=Math.hypot(nx,ny)/.05,w=e.width_deg*sc,h=e.height_deg*sc,m=Math.max(w,h);
@@ -169,7 +170,7 @@ const up=e=>{if(!ptrs.has(e.pointerId))return;ptrs.delete(e.pointerId);cv.classL
  if(e.type=='pointerup'&&drag&&drag.moved<6&&!ptrs.size)activate(e.clientX,e.clientY)};
 cv.addEventListener('pointerup',up);cv.addEventListener('pointercancel',up);
 cv.addEventListener('wheel',e=>{e.preventDefault();zoom(Math.exp(e.deltaY*.0011))},{passive:false});
-addEventListener('keydown',e=>{if(e.key=='Escape'){hidePick();return closeLB()}if(document.body.dataset.tab!='sky'||lbItem)return;
+addEventListener('keydown',e=>{if(e.key=='Escape'){hidePick();return closeLB()}if(document.body.dataset.tab!='cosmos'||lbItem)return;
  const m={ArrowLeft:[-40,0],ArrowRight:[40,0],ArrowUp:[0,-40],ArrowDown:[0,40]}[e.key];if(m){e.preventDefault();pan(...m)}
  else if(e.key=='+'||e.key=='=')zoom(.8);else if(e.key=='-')zoom(1.25)});
 addEventListener('resize',resize);
@@ -191,12 +192,11 @@ function openLB(e){lbItem=e;$('#tip').style.display='none';const L=$('#lb-img');
   fov=e.width_deg?`${(+e.width_deg).toFixed(2)}° × ${(+e.height_deg).toFixed(2)}°`:'';
  $('#lb-info').innerHTML=`<h2>${esc(e.title)}</h2><p class="sub">${esc(e.designation)}</p>`+
   facts([['Type',e.object_type],['Catalog',tags(e)],['Distance',dist(e.distance_ly)],['Position',dms(e.ra,e.dec)],['Date',e.date],['Location',e.location],['Telescope',e.telescope],['Exposure',fmtExp(e.exposure_seconds)]])+
-  sec('The story',story+(story&&e.story_credit?`<p class="src">${esc(e.story_credit)}</p>`:''))+
-  sec('How it was made',facts([['Sub-exposure',e.sub_exposure_seconds?fmtExp(e.sub_exposure_seconds):''],['Frames',e.frames],['Mosaic',e.mosaic===true?'Yes':e.mosaic],['Field of view',fov],['Constellation',e.constellation]]))+
-  sec('Filters',facts([['Filters',e.filters]]))+
-  `<div class="btns"><button id="lb-sky">Show on sky</button><button id="lb-x">Close</button></div>`;
+  sec('Wiki',story+(story&&e.story_credit?`<p class="src">${esc(e.story_credit)}</p>`:''))+
+  sec('How it was captured',facts([['Sub-exposure',e.sub_exposure_seconds?fmtExp(e.sub_exposure_seconds):''],['Frames',e.frames],['Filters',e.filters],['Mosaic',e.mosaic===true?'Yes':e.mosaic],['Field of view',fov],['Constellation',e.constellation]]))+
+  `<div class="btns"><button id="lb-cosmos">Show on cosmos</button><button id="lb-x">Close</button></div>`;
  $('#lb').classList.add('open');$('#lb-x').onclick=closeLB;$('#lb-x').focus();
- $('#lb-sky').onclick=()=>{closeLB();tab('sky');fly({ra:e.ra,dec:e.dec,fov:clamp(Math.max(e.width_deg,e.height_deg)*3.2,5,120)})}}
+ $('#lb-cosmos').onclick=()=>{closeLB();tab('cosmos');fly({ra:e.ra,dec:e.dec,fov:clamp(Math.max(e.width_deg,e.height_deg)*3.2,5,120)})}}
 function closeLB(){$('#lb').classList.remove('open');lbItem=null}
 $('#lb').addEventListener('click',e=>{if(e.target.id=='lb'||e.target.classList.contains('pic')||e.target.id=='lb-img')closeLB()});
 // Gallery: filter by catalog and type, sort by date, title, distance, catalog number or position.
@@ -215,8 +215,8 @@ function gallery(){const terms=$('#q').value.trim().toLowerCase().split(/\s+/).f
 $('#grid').onclick=e=>{const c=e.target.closest('.card');if(c)openLB(cat[+c.dataset.i])};
 $('#q').oninput=gallery;$('#q').onkeydown=e=>{if(e.key=='Escape'&&e.target.value){e.target.value='';gallery()}};
 $('#f-cat').onchange=e=>{const s=$('#sort');if(e.target.value!='all')s.value='num';else if(s.value=='num')s.value='new';gallery()};$('#f-type').onchange=gallery;$('#sort').onchange=gallery;
-function tab(t){document.body.dataset.tab=t;for(const n of['sky','gallery'])$('#t-'+n).setAttribute('aria-current',n==t);history.replaceState(null,'','#'+t);if(t=='sky')draw()}
-$('#t-sky').onclick=()=>tab('sky');$('#t-gallery').onclick=()=>tab('gallery');
-Promise.all([fetch('data/sky.json?v='+V).then(r=>r.json()),fetch('catalog.json',{cache:'no-cache'}).then(r=>r.json())]).then(([s,c])=>{sky=s;cat=c;gallery();tab(location.hash=='#gallery'?'gallery':'sky');resize()})
- .catch(()=>{$('#hint').textContent='Could not load the sky data. Serve this folder over HTTP, for example: python3 -m http.server';$('#hint').style.opacity=1});
+function tab(t){document.body.dataset.tab=t;for(const n of['cosmos','gallery'])$('#t-'+n).setAttribute('aria-current',n==t);history.replaceState(null,'','#'+t);if(t=='cosmos')draw()}
+$('#t-cosmos').onclick=()=>tab('cosmos');$('#t-gallery').onclick=()=>tab('gallery');
+Promise.all([fetch('data/sky.json?v='+V).then(r=>r.json()),fetch('catalog.json',{cache:'no-cache'}).then(r=>r.json())]).then(([s,c])=>{sky=s;cat=c;gallery();tab(location.hash=='#gallery'?'gallery':'cosmos');resize()})
+ .catch(()=>{$('#hint').textContent='Could not load the cosmos data. Serve this folder over HTTP, for example: python3 -m http.server';$('#hint').style.opacity=1});
 </script></body></html>

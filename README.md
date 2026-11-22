@@ -1,6 +1,6 @@
 # the autobiography of light
 
-Deep-sky photographs placed where they sit in the sky (Sky tab), plus a filterable gallery (Gallery tab). Clicking a photo opens a large view with its details and story.
+Deep-sky photographs placed where they sit in the cosmos (Cosmos tab), plus a searchable, filterable gallery (Gallery tab). Clicking a photo opens a large view with its details, wiki text and capture information.
 
 Folder map:
 - `index.html`: the whole website
@@ -9,7 +9,7 @@ Folder map:
 - `data/`: star, constellation and Milky Way data
 - `tools/`: the import script, a local preview server and the object catalog (run on your computer only)
 - `import/`: your drop folder for new photos (never uploaded to the website or GitHub)
-- `CNAME`: tells GitHub Pages to use atlas.ckyr.us (only needed for GitHub hosting)
+- `CNAME`: tells GitHub Pages to use cosmos.ckyr.us (only needed for GitHub hosting)
 
 ## 1. One-time setup
 
@@ -54,18 +54,18 @@ Open it in any text editor. Leave out or empty any field you don't need: empty f
 |---|---|
 | `title` | Name shown on the site. If missing, the designation or file name is used. |
 | `id` | The photo's internal name. It is not shown on the website. It is used for the file names (`photos/<id>.jpg`), as the key in `catalog.json`, and by `--remove`. If you leave it empty it is made from the title ("Andromeda Galaxy" becomes `andromeda-galaxy`). Two photos with the same id are treated as the same photo: adding the second replaces the first. To keep several photos of one object, give each its own `id`. `_template.json` has an `id` line at the bottom; `_example_m31.json` does not, so add a line such as `"id": "m31",` yourself. See "Photo ids, editing and adding more photos of the same object" below. |
-| `designation` | Catalog name such as M31, NGC 7000 or Caldwell 20. Shown under the thumbnail on the sky and used to look up the object. |
+| `designation` | Catalog name such as M31, NGC 7000 or Caldwell 20. Shown under the thumbnail in the Cosmos tab and used to look up the object. |
 | `date` | Capture date as YYYY-MM-DD. If empty, the photo's EXIF date is used (Lightroom exports include it unless you turned metadata off). |
 | `hint` | An object name used to tell astrometry.net roughly where to look. Defaults to the designation. |
 | `distance_ly` | Distance from Earth in light years (a plain number). Shown as "2.5 million light years". Used for the gallery's distance sort. |
 | `location` | Capture location. |
 | `telescope` | Telescope or lens (add the camera here too if you want it shown). Shown in the gallery and under Date in the details. |
 | `exposure_seconds` | Total exposure in seconds. Shown as hours, minutes and seconds, for example 12000 becomes "3 h 20 min". If empty but `sub_exposure_seconds` and `frames` are given, it is calculated. |
-| `sub_exposure_seconds`, `frames` | Length of each frame in seconds and the number of frames. Shown under "How it was made". |
+| `sub_exposure_seconds`, `frames` | Length of each frame in seconds and the number of frames. Shown under "How it was captured". |
 | `mosaic` | For example "2 x 2 panels", or true. Leave empty if it is a single frame. |
-| `filters` | Text, or a list of filters. |
-| `story` | The description under "The story". You can write it yourself or adapt your own notes. Separate paragraphs with `\n\n`. See "Story text and credits" below. |
-| `story_credit` | Optional small credit line shown under the story, for example "Description adapted from Wikipedia (CC BY-SA 4.0)". |
+| `filters` | Text, or a list of filters. Shown under "How it was captured", below the number of frames. |
+| `story` | The text under "Wiki" in the photo details (the field is still called `story`). You can write it yourself or adapt your own notes. Separate paragraphs with `\n\n`. See "Wiki text and credits" below. |
+| `story_credit` | Optional small credit line shown under the wiki text, for example "Description adapted from Wikipedia (CC BY-SA 4.0)". |
 | `object_type`, `messier`, `caldwell` | Normally filled in automatically (see below). Set them to override. |
 | `constellation` | Optional text. |
 | `ra`, `dec`, `width_deg`, `rotation` | Skip astrometry.net and use your own position. `ra` and `dec` are in decimal degrees (J2000), `width_deg` is the width of the image on the sky, and `rotation` is the direction of the image's top edge in degrees east of north. `ra`, `dec` and `width_deg` must all be given. |
@@ -131,7 +131,7 @@ astrometry.net only provides the position, so the script gets the object type an
 Distance is not looked up automatically, so enter `distance_ly` yourself.
 
 ### If a solve fails
-Add the object name as `hint`, or give `ra`, `dec` and `width_deg` yourself. Heavy star removal and very tight crops can make solving fail. If a photo appears mirrored on the sky, tell Claude and a flip option can be added.
+Add the object name as `hint`, or give `ra`, `dec` and `width_deg` yourself. Heavy star removal and very tight crops can make solving fail. If a photo appears mirrored in the Cosmos tab, tell Claude and a flip option can be added.
 
 ## 3. Remove photographs
 Run `python3 tools/add_photo.py --list` to see the ids, then `python3 tools/add_photo.py --remove ID`. The site comes with ten sample photographs (ids starting with `sample-`) that show how every field looks. Remove them all in one go with:
@@ -157,7 +157,7 @@ In this folder run `python3 tools/serve.py` (on Windows: `python`), then open ht
 | Privacy | The repository is public, including the tools folder | Only the website files are on the Pi |
 | Rules | No online shops or commercial use | Cloudflare's terms discourage serving mostly large images and video through its free proxy; a small personal gallery is normally fine, but check their terms |
 
-GitHub Pages is the simplest and most reliable. The Pi gives you full control and no limits. Only one of them can own atlas.ckyr.us at a time. Either way, your computer's project folder is the master copy.
+GitHub Pages is the simplest and most reliable. The Pi gives you full control and no limits. Only one of them can own cosmos.ckyr.us at a time. Either way, your computer's project folder is the master copy.
 
 ## 6. Option A: GitHub Pages
 
@@ -201,18 +201,28 @@ Notes for Option 2:
 - If a text editor opens asking for a message, you ran plain `git pull` instead of `git pull --rebase`. Save and close it (in vim, type `:wq` and press Enter).
 - If git reports a conflict, run `git status` to see the files. Open each one, look for the lines `<<<<<<<`, `=======` and `>>>>>>>`, keep the content you want (for `catalog.json`, keep the entries from both sides and make sure the commas are right), and delete those marker lines. Then run `git add FILE` and `git rebase --continue`. To cancel and return to where you were, run `git rebase --abort`.
 - Never use `git push --force` to get around the error. It overwrites what is on GitHub.
-- After pulling, check that the `CNAME` file still contains `atlas.ckyr.us` and that the custom domain is still set in Settings, Pages. If you removed the domain in the settings, GitHub deleted the file: enter the domain again in the settings (GitHub creates the file again), run `git pull --rebase`, and then continue.
+- After pulling, check that the `CNAME` file still contains `cosmos.ckyr.us` and that the custom domain is still set in Settings, Pages. If you removed the domain in the settings, GitHub deleted the file: enter the domain again in the settings (GitHub creates the file again), run `git pull --rebase`, and then continue.
 - Optional: run `git config pull.rebase true` once, so a plain `git pull` always works this way. Running `git pull --rebase` before every push is harmless: if nothing changed on GitHub it does nothing.
 
 GitHub rebuilds the site by itself after each push, and the change is live in about a minute. There is no separate publish step. Refresh the page to see it. Deleted photos remain in git history, so the repository slowly grows.
 
-### Use atlas.ckyr.us (Cloudflare DNS)
-1. Push the project with the `CNAME` file (already contains `atlas.ckyr.us`).
-2. On GitHub: repository Settings, Pages, Custom domain, enter `atlas.ckyr.us`, Save. Changing or removing the custom domain later makes GitHub commit to your repository (it adds or deletes the `CNAME` file), so use Option 2 under "Publishing updates" for your next push.
-3. In the Cloudflare dashboard, open the DNS records for ckyr.us and add: Type `CNAME`, Name `atlas`, Target `YOUR-USERNAME.github.io` (without the repository name), Proxy status "DNS only" (grey cloud). If a record named `atlas` already exists, delete it first.
+### Use cosmos.ckyr.us (Cloudflare DNS)
+1. Push the project with the `CNAME` file (already contains `cosmos.ckyr.us`).
+2. On GitHub: repository Settings, Pages, Custom domain, enter `cosmos.ckyr.us`, Save. Changing or removing the custom domain later makes GitHub commit to your repository (it adds or deletes the `CNAME` file), so use Option 2 under "Publishing updates" for your next push.
+3. In the Cloudflare dashboard, open the DNS records for ckyr.us and add: Type `CNAME`, Name `cosmos`, Target `YOUR-USERNAME.github.io` (without the repository name), Proxy status "DNS only" (grey cloud). If a record named `cosmos` already exists, delete it first.
 4. Back in GitHub Pages settings, wait for the DNS check to succeed, then tick "Enforce HTTPS". The certificate can take up to an hour.
 5. Optional: you can then turn Cloudflare's proxy (orange cloud) on if you want Cloudflare caching. If you do, set Cloudflare's SSL/TLS mode to "Full".
 6. Optional: verify ckyr.us in your GitHub account settings (Settings, Pages, Add a domain) so nobody else can claim subdomains of it.
+
+### Changing the web address later (for example from atlas.ckyr.us to cosmos.ckyr.us)
+A GitHub Pages site has only one custom domain, so the old address stops working once you switch. Do the steps in this order:
+1. On GitHub: repository Settings, Pages, Custom domain. Replace the old domain with the new one and Save. GitHub commits the new `CNAME` file. (The `CNAME` file holds just the domain on one line. You can also edit it yourself and push; the settings page and the file are two ways of changing the same thing.)
+2. In Cloudflare, open the DNS records for ckyr.us and add: Type `CNAME`, Name `cosmos` (the new subdomain), Target `YOUR-USERNAME.github.io`, Proxy status "DNS only" (grey cloud).
+3. Back in GitHub Pages settings, wait for "DNS check successful", then tick "Enforce HTTPS". A new certificate is issued for the new name, which can take up to an hour. Until then the new address may show a certificate warning.
+4. Delete the old DNS record (`atlas`) in Cloudflare. Do not leave an unused subdomain pointing at GitHub Pages, because someone else could claim it.
+5. On your computer run `git pull --rebase` to get GitHub's commit with the new `CNAME` file, then push your changes as usual (Option 2 under "Publishing updates").
+6. Old links stop working. If you have shared the old address, a redirect rule in Cloudflare can forward it to the new one.
+If you host on the Raspberry Pi instead, change the hostname of the route in your Cloudflare tunnel (section 7) and delete the old route.
 
 ## 7. Option B: Raspberry Pi
 
@@ -250,13 +260,13 @@ rsync -av --delete --exclude .git --exclude import --exclude tools --exclude REA
 ```
 Use this same command for the first publish and for every update after you add or remove photos. It only copies what changed. Test on your home network at `http://PI_ADDRESS:8080`.
 
-### Use atlas.ckyr.us (Cloudflare Tunnel)
+### Use cosmos.ckyr.us (Cloudflare Tunnel)
 Because your domain and the tunnel are both on Cloudflare, no manual DNS record is needed.
 1. In the Cloudflare dashboard go to Networking, Tunnels, and select your existing tunnel.
 2. Under Routes choose Add route, then Published application.
-3. Hostname: subdomain `atlas`, domain `ckyr.us`. Service URL: `http://localhost:8080` (use `http://PI_ADDRESS:8080` if cloudflared runs on a different machine than nginx).
+3. Hostname: subdomain `cosmos`, domain `ckyr.us`. Service URL: `http://localhost:8080` (use `http://PI_ADDRESS:8080` if cloudflared runs on a different machine than nginx).
 4. Save. Cloudflare creates the DNS record for you and serves the site over HTTPS.
-If your tunnel is configured with a local `config.yml` instead, add an entry above the final catch-all rule, `- hostname: atlas.ckyr.us` with `service: http://localhost:8080`, then run `cloudflared tunnel route dns YOUR-TUNNEL-NAME atlas.ckyr.us` and restart cloudflared.
+If your tunnel is configured with a local `config.yml` instead, add an entry above the final catch-all rule, `- hostname: cosmos.ckyr.us` with `service: http://localhost:8080`, then run `cloudflared tunnel route dns YOUR-TUNNEL-NAME cosmos.ckyr.us` and restart cloudflared.
 
 ### Notes on the SD card
 Serving a static site is mostly reading, which SD cards handle fine. Failures come mainly from heavy writing (logs, swap) and sudden power loss. The `access_log off` line above avoids most writes. A good-quality or high-endurance card, or a small SSD, and a clean shutdown help further. Keep your project folder on your computer as the master copy, so a dead card only means reinstalling and running the rsync command again.
@@ -264,16 +274,25 @@ Serving a static site is mostly reading, which SD cards handle fine. Failures co
 ## 8. Protecting the photographs
 The site discourages casual saving: no right-click menu or dragging on photos, and the large view is a background image rather than a normal image. This cannot stop determined people, because any image a browser shows can be saved with developer tools or a screenshot. The practical protections are showing a smaller copy (use `--max-size 1600`), and adding a watermark (ask Claude to add this option). The website only ever contains the resized copies, never your originals.
 
-## 9. On the sky: many photos close together
+## Using the site
+**Cosmos tab.** Drag to look around, scroll or pinch to zoom, and click a photograph to open its details. The checkboxes at the bottom left switch Photos, Constellations, Names and Grid on and off (turn Photos off to read the constellation names behind them), and "Reset view" returns to the start. In the photo details, "Show on cosmos" flies to the photo's position.
+
+**Gallery tab.** The search box at the top filters as you type: it looks at the title, designation, object type, location, telescope, filters, constellation, date, wiki text and distance, and understands catalog numbers such as `m31` or `caldwell 20`. It works together with the Catalog and Type filters and the Sort menu (including closest first by distance and by catalog number).
+
+**Stars.** About 41,000 stars are included. Only the brightest are drawn when the whole cosmos is in view, and fainter ones appear as you zoom in, so the view stays clean. Drawing stops at the first star that is too faint, so the extra stars cost almost nothing.
+
+**Byline.** The name in "photos by ..." links to the Instagram page https://www.instagram.com/the.autobiography.of.light/ (opens in a new tab), so visitors can get in touch there. To change the link, look for `instagram.com` in `index.html`.
+
+## 9. In the Cosmos tab: many photos close together
 Photos too small to show at true size appear as thumbnails. Neighbouring thumbnails merge into one marker with a count badge. Clicking it zooms in to separate different objects, or opens a list when the photos are of the same object. Zoomed in, photos are drawn at their real size and rotation, and clicking where several overlap opens the same list.
 
-## Story text and credits
-Crediting a source does not give you permission to copy it. Text on websites such as Telescopius is normally protected by copyright, and I could not find their terms of use to check what reuse they allow. The safest approach is to use such pages as reference and write the story in your own words, or to ask the site for permission. Facts such as distances and sizes are free to use; the wording is what is protected. If you do adapt text that comes with a licence that allows it (Wikipedia text is CC BY-SA 4.0, which requires credit and that your adaptation is shared under the same licence), put the credit in the `story_credit` field and it appears under the story. There is no need to add anything to the site-wide credits for story text.
+## Wiki text and credits
+Crediting a source does not give you permission to copy it. Text on websites such as Telescopius is normally protected by copyright, and I could not find their terms of use to check what reuse they allow. The safest approach is to use such pages as reference and write the wiki text in your own words, or to ask the site for permission. Facts such as distances and sizes are free to use; the wording is what is protected. If you do adapt text that comes with a licence that allows it (Wikipedia text is CC BY-SA 4.0, which requires credit and that your adaptation is shared under the same licence), put the credit in the `story_credit` field and it appears under the wiki text. There is no need to add anything to the site-wide credits for the wiki text.
 
 ## Updates and browser caching
 Browsers keep copies of files, which is why a refresh was needed while you tested locally. Visitors to the finished site are much less affected: the catalog is always re-checked, every photo's address carries a version number that changes when you add or replace it, and the sky data carries a version in `index.html` (`const V`). Change that value if you ever replace `data/milkyway.jpg` or `data/sky.json`. GitHub Pages also tells browsers to keep files for only about ten minutes, so new photos normally show up within that time with a normal reload. If you later switch on Cloudflare's proxy, purge its cache from the Cloudflare dashboard after publishing changes to existing files.
 
 ## Data credits
-- `data/sky.json` is derived from d3-celestial by Olaf Frohn (BSD-3-Clause, https://github.com/ofrohn/d3-celestial): Hipparcos stars, constellation lines and names.
+- `data/sky.json` is derived from d3-celestial by Olaf Frohn (BSD-3-Clause, https://github.com/ofrohn/d3-celestial): about 41,000 stars down to magnitude 8, constellation lines and names. Fainter stars appear as you zoom in.
 - `data/milkyway.jpg` is made from the Milky Way background of Deep Star Maps 2020 by NASA's Scientific Visualization Studio (https://svs.gsfc.nasa.gov/4851), tone-mapped and resized to 4096x2048 with RA 0h at the left edge.
 - `tools/catalog.json` is derived from OpenNGC by Mattia Verga (CC-BY-SA 4.0, https://github.com/mattiaverga/OpenNGC): object types and Messier and Caldwell numbers.

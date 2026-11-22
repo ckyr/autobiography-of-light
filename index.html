@@ -63,7 +63,7 @@ body:not([data-tab=sky]) :is(#sky,#ctl,#hint){display:none}
 <header><div><h1>the autobiography of light</h1><p class="by">photos by Christos Kyratsous</p></div>
 <nav><button id="t-sky" aria-current="true">Sky</button><button id="t-gallery">Gallery</button></nav></header>
 <canvas id="sky" aria-label="Interactive map of the sky with astrophotographs"></canvas>
-<div id="ctl"><label><input type="checkbox" id="o-lines" checked>Constellations</label><label><input type="checkbox" id="o-names" checked>Names</label><label><input type="checkbox" id="o-grid">Grid</label><button id="reset">Reset view</button></div>
+<div id="ctl"><label><input type="checkbox" id="o-photos" checked>Photos</label><label><input type="checkbox" id="o-lines" checked>Constellations</label><label><input type="checkbox" id="o-names" checked>Names</label><label><input type="checkbox" id="o-grid">Grid</label><button id="reset">Reset view</button></div>
 <div id="hint">Drag to look around, scroll or pinch to zoom, click a photograph.</div>
 <div id="tip"></div><div id="pick"></div>
 <main id="gal"><div class="bar"><span id="count"></span><span class="filters">
@@ -77,7 +77,7 @@ body:not([data-tab=sky]) :is(#sky,#ctl,#hint){display:none}
 const V='4',D=Math.PI/180,$=s=>document.querySelector(s),SERIF='"Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif',MIN=58;
 const cv=$('#sky'),ctx=cv.getContext('2d'),ptrs=new Map(),imgs={},calm=matchMedia('(prefers-reduced-motion:reduce)').matches;
 let sky,cat=[],W,H,R,dpr=1,s0,c0,hits=[],drag=null,pd=0,lbItem=null;
-const view={ra:300,dec:35,fov:100},home={...view},opts={lines:true,names:true,grid:false},clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+const view={ra:300,dec:35,fov:100},home={...view},opts={photos:true,lines:true,names:true,grid:false},clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
 const esc=s=>String(Array.isArray(s)?s.join(', '):s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const U=(e,k)=>e[k]+(e.v?'?v='+e.v:'');
 function img(u){let i=imgs[u];if(!i){i=imgs[u]=new Image();i.onload=draw;i.src=u}return i.complete&&i.naturalWidth?i:null}
@@ -115,7 +115,7 @@ function draw(){
  ctx.globalAlpha=1;
  if(opts.names){ctx.font='italic 13px '+SERIF;ctx.fillStyle='rgba(185,200,235,.85)';ctx.shadowColor='#000';ctx.shadowBlur=4;ctx.textAlign='center';for(const[n,a,b]of sky.names){const p=P(a,b);if(p&&p[0]>0&&p[0]<W&&p[1]>0&&p[1]<H)ctx.fillText(n,p[0],p[1])}ctx.shadowBlur=0}
  hits=[];const big=[],small=[];
- for(const e of cat){const p=P(e.ra,e.dec),q=P(e.ra,Math.min(89.9,e.dec+.05));if(!p||!q)continue;
+ for(const e of opts.photos?cat:[]){const p=P(e.ra,e.dec),q=P(e.ra,Math.min(89.9,e.dec+.05));if(!p||!q)continue;
   const nx=q[0]-p[0],ny=q[1]-p[1],sc=Math.hypot(nx,ny)/.05,w=e.width_deg*sc,h=e.height_deg*sc,m=Math.max(w,h);
   if(p[0]<-Math.max(m,MIN)||p[0]>W+Math.max(m,MIN)||p[1]<-Math.max(m,MIN)||p[1]>H+Math.max(m,MIN))continue;
   (m<MIN?small:big).push({e,p,w,h,m,th:Math.atan2(nx,-ny)})}
@@ -168,7 +168,7 @@ addEventListener('resize',resize);
 // Deterrents against casual saving: no context menu or dragging on photographs.
 addEventListener('contextmenu',e=>{if(e.target.closest('#lb,#grid,#sky,#pick'))e.preventDefault()});
 addEventListener('dragstart',e=>{if(e.target.tagName=='IMG')e.preventDefault()});
-$('#o-lines').onchange=e=>{opts.lines=e.target.checked;draw()};$('#o-grid').onchange=e=>{opts.grid=e.target.checked;draw()};$('#o-names').onchange=e=>{opts.names=e.target.checked;draw()};$('#reset').onclick=()=>fly(home);
+$('#o-photos').onchange=e=>{opts.photos=e.target.checked;$('#tip').style.display='none';hidePick();draw()};$('#o-lines').onchange=e=>{opts.lines=e.target.checked;draw()};$('#o-grid').onchange=e=>{opts.grid=e.target.checked;draw()};$('#o-names').onchange=e=>{opts.names=e.target.checked;draw()};$('#reset').onclick=()=>fly(home);
 setTimeout(()=>$('#hint').style.opacity=0,9000);
 // Formatting
 const fmtExp=s=>{s=Math.round(+s);if(!s)return'';const h=Math.floor(s/3600),m=Math.floor(s%3600/60),r=s%60;return[h&&h+' h',m&&m+' min',r&&r+' s'].filter(Boolean).join(' ')};
@@ -200,7 +200,7 @@ function gallery(){const cf=$('#f-cat').value,tf=$('#f-type').value,k=$('#sort')
  a.sort(by[k]);const ln=s=>s?`<span>${esc(s)}</span>`:'';
  $('#count').textContent=cat.length?(a.length<cat.length?`${a.length} of ${cat.length} photographs`:`${a.length} photograph${a.length>1?'s':''}`):'No photographs yet. See the README to add one.';
  $('#grid').innerHTML=a.map(e=>`<button class="card" data-i="${cat.indexOf(e)}"><img loading="lazy" src="${esc(U(e,'thumb'))}" alt="${esc(e.title)}"><b>${esc(e.title)}</b>`+
-  ln([e.designation,e.object_type].filter(Boolean).join(', '))+ln([e.date,fmtExp(e.exposure_seconds)].filter(Boolean).join(', '))+ln([e.location,e.telescope].filter(Boolean).join(', '))+`</button>`).join('')}
+  ln(dist(e.distance_ly))+ln([e.designation,e.object_type].filter(Boolean).join(', '))+ln([e.date,fmtExp(e.exposure_seconds)].filter(Boolean).join(', '))+ln([e.location,e.telescope].filter(Boolean).join(', '))+`</button>`).join('')}
 $('#grid').onclick=e=>{const c=e.target.closest('.card');if(c)openLB(cat[+c.dataset.i])};
 $('#f-cat').onchange=e=>{const s=$('#sort');if(e.target.value!='all')s.value='num';else if(s.value=='num')s.value='new';gallery()};$('#f-type').onchange=gallery;$('#sort').onchange=gallery;
 function tab(t){document.body.dataset.tab=t;for(const n of['sky','gallery'])$('#t-'+n).setAttribute('aria-current',n==t);history.replaceState(null,'','#'+t);if(t=='sky')draw()}

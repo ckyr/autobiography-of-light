@@ -143,10 +143,12 @@ function draw(){
 function drawGrid(){ctx.strokeStyle='rgba(120,200,190,.38)';ctx.lineWidth=1;ctx.beginPath();
  for(let d=-75;d<=75;d+=15)path([Array.from({length:181},(_,i)=>[i*2,d])]);
  for(let a=0;a<360;a+=30)path([Array.from({length:91},(_,i)=>[a,-90+i*2])]);ctx.stroke();
- ctx.font='11px system-ui,sans-serif';ctx.fillStyle='rgba(150,220,210,.9)';ctx.textAlign='left';
- const cd=clamp(Math.round(view.dec/15)*15,-75,75),lab=(t,ra,de)=>{const p=P(ra,de);if(p&&p[0]>0&&p[0]<W&&p[1]>0&&p[1]<H)ctx.fillText(t,p[0]+4,p[1]-4)};
- for(let d=-75;d<=75;d+=15)lab((d>0?'+':d<0?'−':'')+Math.abs(d)+'°',(Math.round(view.ra/30)*30+360)%360,d);
- for(let a=0;a<360;a+=30)lab(a/15+'h',a,cd)}
+ ctx.font='11px system-ui,sans-serif';ctx.fillStyle='rgba(150,220,210,.95)';ctx.textAlign='left';ctx.shadowColor='#000';ctx.shadowBlur=3;
+ // Declination labels sit just above their line, right ascension labels just below theirs, so the two never collide where the lines cross.
+ const cd=clamp(Math.round(view.dec/15)*15,-75,75),lab=(t,ra,de,dy)=>{const p=P(ra,de);if(p&&p[0]>0&&p[0]<W&&p[1]>0&&p[1]<H)ctx.fillText(t,p[0]+4,p[1]+dy)};
+ for(let d=-75;d<=75;d+=15)lab((d>0?'+':d<0?'−':'')+Math.abs(d)+'°',(Math.round(view.ra/30)*30+360)%360,d,-4);
+ for(let a=0;a<360;a+=30)lab(a/15+'h',a,cd,13);
+ ctx.shadowBlur=0}
 function resize(){dpr=window.devicePixelRatio||1;W=innerWidth;H=innerHeight;cv.width=W*dpr;cv.height=H*dpr;draw()}
 function hitsAt(x,y){const out=[];for(let i=hits.length-1;i>=0;i--){const h=hits[i];if(Math.hypot(x-h.x,y-h.y)<=h.r)for(const e of h.es)if(!out.includes(e))out.push(e)}return out}
 function pan(dx,dy){const k=R*D;view.ra=(view.ra+dx/(k*Math.max(.25,Math.cos(view.dec*D)))+360)%360;view.dec=clamp(view.dec+dy/k,-88,88);draw()}

@@ -90,11 +90,15 @@ mwI.onload=()=>{const c=document.createElement('canvas');mwW=c.width=mwI.width;m
 // Draws the Milky Way photograph by inverting the projection for every pixel (rendered at low resolution, then scaled up).
 function drawMW(){if(!mwT)return;const sc=.4,w=Math.ceil(W*sc),h=Math.ceil(H*sc);
  if(!off||off.width!=w||off.height!=h){off=document.createElement('canvas');off.width=w;off.height=h;offc=off.getContext('2d')}
- const id=offc.createImageData(w,h),o=id.data;let n=0;
+ const id=offc.createImageData(w,h),o=id.data,bil=view.fov<40;let n=0;
  for(let j=0;j<h;j++){const eta=H/2-(j+.5)/sc;for(let i=0;i<w;i++,n+=4){const xi=W/2-(i+.5)/sc,rho=Math.hypot(xi,eta),c=2*Math.atan(rho/(2*R)),sc_=Math.sin(c),cc=Math.cos(c);
   const ph=Math.asin(clamp(cc*s0+(rho?eta*sc_*c0/rho:0),-1,1)),dl=Math.atan2(xi*sc_,rho*c0*cc-eta*s0*sc_);
-  const ra=((view.ra+dl/D)%360+360)%360,k=(Math.min(mwH-1,Math.floor((90-ph/D)/180*mwH))*mwW+Math.floor(ra/360*mwW)%mwW)*4;
-  o[n]=Math.min(255,mwT[k]*MWG);o[n+1]=Math.min(255,mwT[k+1]*MWG);o[n+2]=Math.min(255,mwT[k+2]*MWG);o[n+3]=255}}
+  const ra=((view.ra+dl/D)%360+360)%360;o[n+3]=255;
+  if(bil){const fx=ra/360*mwW-.5,fy=(90-ph/D)/180*mwH-.5,x0=Math.floor(fx),y0=Math.floor(fy),tx=fx-x0,ty=fy-y0,xa=((x0%mwW)+mwW)%mwW,xb=(xa+1)%mwW,ya=clamp(y0,0,mwH-1),yb=clamp(y0+1,0,mwH-1),
+    a=(ya*mwW+xa)*4,b=(ya*mwW+xb)*4,c2=(yb*mwW+xa)*4,d=(yb*mwW+xb)*4;
+   for(let q=0;q<3;q++)o[n+q]=Math.min(255,((mwT[a+q]*(1-tx)+mwT[b+q]*tx)*(1-ty)+(mwT[c2+q]*(1-tx)+mwT[d+q]*tx)*ty)*MWG)}
+  else{const k=(Math.min(mwH-1,Math.floor((90-ph/D)/180*mwH))*mwW+Math.floor(ra/360*mwW)%mwW)*4;
+   o[n]=Math.min(255,mwT[k]*MWG);o[n+1]=Math.min(255,mwT[k+1]*MWG);o[n+2]=Math.min(255,mwT[k+2]*MWG)}}}
  offc.putImageData(id,0,0);ctx.globalCompositeOperation='lighter';ctx.imageSmoothingQuality='high';ctx.drawImage(off,0,0,W,H);ctx.globalCompositeOperation='source-over'}
 function drawMarker(e,x,y,badge,label){const ar=e.width_deg/e.height_deg,mw=ar>=1?MIN:MIN*ar,mh=ar>=1?MIN/ar:MIN,u=img(U(e,'thumb'));
  ctx.fillStyle='#0a0f1d';ctx.fillRect(x-mw/2,y-mh/2,mw,mh);if(u)ctx.drawImage(u,x-mw/2,y-mh/2,mw,mh);
@@ -120,7 +124,7 @@ function draw(){
   if(p[0]<-Math.max(m,MIN)||p[0]>W+Math.max(m,MIN)||p[1]<-Math.max(m,MIN)||p[1]>H+Math.max(m,MIN))continue;
   (m<MIN?small:big).push({e,p,w,h,m,th:Math.atan2(nx,-ny)})}
  big.sort((a,b)=>b.m-a.m);
- for(const{e,p,w,h,m,th}of big){ctx.save();ctx.translate(p[0],p[1]);ctx.rotate(th-(e.rotation||0)*D);const u=(m>500&&img(U(e,'image')))||img(U(e,'thumb'));
+ for(const{e,p,w,h,m,th}of big){ctx.save();ctx.translate(p[0],p[1]);ctx.rotate(th-(e.rotation||0)*D);const u=(m*dpr>380&&img(U(e,'image')))||img(U(e,'thumb'));
   if(u)ctx.drawImage(u,-w/2,-h/2,w,h);ctx.strokeStyle='rgba(235,235,225,.35)';ctx.strokeRect(-w/2,-h/2,w,h);ctx.restore();hits.push({es:[e],x:p[0],y:p[1],r:m/2})}
  // Photographs too small to show at true size become thumbnails; neighbours are merged into one marker with a count.
  const cl=[];for(const it of small){const c=cl.find(c=>Math.hypot(c.x-it.p[0],c.y-it.p[1])<MIN*.55);c?c.items.push(it):cl.push({x:it.p[0],y:it.p[1],items:[it]})}
@@ -188,7 +192,7 @@ function openLB(e){lbItem=e;$('#tip').style.display='none';const L=$('#lb-img');
   sec('Filters',facts([['Filters',e.filters]]))+
   `<div class="btns"><button id="lb-sky">Show on sky</button><button id="lb-x">Close</button></div>`;
  $('#lb').classList.add('open');$('#lb-x').onclick=closeLB;$('#lb-x').focus();
- $('#lb-sky').onclick=()=>{closeLB();tab('sky');fly({ra:e.ra,dec:e.dec,fov:clamp(Math.max(e.width_deg,e.height_deg)*2.6,3,120)})}}
+ $('#lb-sky').onclick=()=>{closeLB();tab('sky');fly({ra:e.ra,dec:e.dec,fov:clamp(Math.max(e.width_deg,e.height_deg)*3.2,5,120)})}}
 function closeLB(){$('#lb').classList.remove('open');lbItem=null}
 $('#lb').addEventListener('click',e=>{if(e.target.id=='lb'||e.target.classList.contains('pic')||e.target.id=='lb-img')closeLB()});
 // Gallery: filter by catalog and type, sort by date, title, distance, catalog number or position.
@@ -200,7 +204,7 @@ function gallery(){const cf=$('#f-cat').value,tf=$('#f-type').value,k=$('#sort')
  a.sort(by[k]);const ln=s=>s?`<span>${esc(s)}</span>`:'';
  $('#count').textContent=cat.length?(a.length<cat.length?`${a.length} of ${cat.length} photographs`:`${a.length} photograph${a.length>1?'s':''}`):'No photographs yet. See the README to add one.';
  $('#grid').innerHTML=a.map(e=>`<button class="card" data-i="${cat.indexOf(e)}"><img loading="lazy" src="${esc(U(e,'thumb'))}" alt="${esc(e.title)}"><b>${esc(e.title)}</b>`+
-  ln(dist(e.distance_ly))+ln([e.designation,e.object_type].filter(Boolean).join(', '))+ln([e.date,fmtExp(e.exposure_seconds)].filter(Boolean).join(', '))+ln([e.location,e.telescope].filter(Boolean).join(', '))+`</button>`).join('')}
+  ln([e.designation,e.object_type].filter(Boolean).join(', '))+ln(dist(e.distance_ly))+ln([e.date,fmtExp(e.exposure_seconds)].filter(Boolean).join(', '))+ln([e.location,e.telescope].filter(Boolean).join(', '))+`</button>`).join('')}
 $('#grid').onclick=e=>{const c=e.target.closest('.card');if(c)openLB(cat[+c.dataset.i])};
 $('#f-cat').onchange=e=>{const s=$('#sort');if(e.target.value!='all')s.value='num';else if(s.value=='num')s.value='new';gallery()};$('#f-type').onchange=gallery;$('#sort').onchange=gallery;
 function tab(t){document.body.dataset.tab=t;for(const n of['sky','gallery'])$('#t-'+n).setAttribute('aria-current',n==t);history.replaceState(null,'','#'+t);if(t=='sky')draw()}

@@ -16,12 +16,17 @@ from pathlib import Path
 import requests
 from PIL import Image, ImageOps
 
+try:
+    import orient  # needs numpy; double-checks orientation and mirroring against a star catalogue
+except ImportError:
+    orient = None
+
 ROOT = Path(__file__).resolve().parent.parent
 IMPORT = ROOT / "import"
 API = "https://nova.astrometry.net/api"
 FIELDS = ["id", "title", "designation", "date", "hint", "distance_ly", "object_type", "messier", "caldwell", "constellation",
           "location", "telescope", "exposure_seconds", "sub_exposure_seconds", "frames", "mosaic",
-          "filters", "story", "story_credit", "ra", "dec", "width_deg", "rotation"]
+          "filters", "story", "story_credit", "ra", "dec", "width_deg", "rotation", "flip"]
 NUMS = {"distance_ly": float, "exposure_seconds": float, "sub_exposure_seconds": float, "frames": int, "messier": int,
         "caldwell": int, "ra": float, "dec": float, "width_deg": float, "rotation": float}
 TYPES = {"G": "Galaxy", "GPair": "Galaxy", "GTrpl": "Galaxy", "GGroup": "Galaxy", "PN": "Planetary nebula", "HII": "Emission nebula",
@@ -109,11 +114,11 @@ def solve(path, key, hint, log):
     else:
         raise RuntimeError("Timed out waiting for astrometry.net.")
     c = requests.get(f"{API}/jobs/{job}/calibration/", timeout=60).json()
-    log(f"  Solved: RA {c['ra']:.4f}, Dec {c['dec']:.4f}, {c['pixscale']:.2f} arcsec/px, up is {c['orientation']:.1f} deg E of N")
-    return c["ra"], c["dec"], c["pixscale"], c["orientation"]
+    log(f"  Solved: RA {c['ra']:.4f}, Dec {c['dec']:.4f}, {c['pixscale']:.2f} arcsec/px, rotation {c['orientation']:.1f}, parity {c.get('parity')}")
+    return c["ra"], c["dec"], c["pixscale"], c["orientation"], c.get("parity")
 
 
-def add_photo(image, meta, key=None, max_size=2400, log=print):
+def add_photo(image, meta, key=None, max_size=2400, log=print, check=True):
     image = Path(image)
     m = {k: v for k, v in meta.items() if not blank(v)}
     if "story" not in m and "notes" in m:
@@ -143,8 +148,26 @@ def add_photo(image, meta, key=None, max_size=2400, log=print):
             log(f"  Position hint for '{name}': {hint}" if hint else f"  Could not look up '{name}'; solving without a hint.")
         with tempfile.TemporaryDirectory() as tmp:
             sp = Path(tmp) / "solve.jpg"; small.save(sp, quality=90)
-            ra, dec, ps, rot = solve(sp, key, hint, log)
+            ra, dec, ps, rot, parity = solve(sp, key, hint, log)
         width = ps * small.width / 3600
+    flip = str(m.get("flip", "")).lower() in ("1", "true", "yes")
+    if check and orient is not None:   # does the picture's star pattern agree with the position and rotation from astrometry.net?
+        try:
+            r = orient.verify(im, ra, dec, width, width * im.height / im.width)
+            verdict, why = orient.decide(r, (-rot) % 360, flip)
+            if verdict == "ok":
+                log(f"  Star check: orientation confirmed ({why}).")
+            elif verdict == "fix" and r["mirror"] != flip and "flip" not in m:
+                flip = r["mirror"]
+                log(f"  Star check: this photo is {'a MIRROR IMAGE of the sky and will be shown flipped' if flip else 'not mirrored'} ({why}).")
+            elif verdict == "fix":
+                log(f"  WARNING: the star check disagrees with the rotation from astrometry.net ({why}). Look at the photo in the Cosmos tab; you can set rotation yourself.")
+            else:
+                log(f"  Star check: {why}; orientation not verified.")
+        except Exception as e:
+            log(f"  Star check skipped ({e})")
+    elif check:
+        log("  (Install numpy with 'pip install numpy' to let the script double-check orientation and mirroring against a star catalogue.)")
     obj, how = find_object([m.get("designation"), m.get("hint"), title], ra, dec, max(width, width * im.height / im.width))
     if obj:
         log(f"  Catalog match ({how}): {obj[0]}, {TYPES.get(obj[1], 'Other')}" + (f", Messier {obj[5]}" if obj[5] else "") + (f", Caldwell {obj[6]}" if obj[6] else ""))
@@ -159,10 +182,12 @@ def add_photo(image, meta, key=None, max_size=2400, log=print):
     thumb.save(ROOT / "photos" / "thumbs" / f"{pid}.jpg", quality=82, optimize=True)
     entry = {"id": pid, "title": title}
     for k in FIELDS:
-        if k not in ("id", "title", "hint", "ra", "dec", "width_deg", "rotation") and not blank(m.get(k)):
+        if k not in ("id", "title", "hint", "ra", "dec", "width_deg", "rotation", "flip") and not blank(m.get(k)):
             entry[k] = m[k]
     entry.update(ra=round(ra, 4), dec=round(dec, 4), width_deg=round(width, 3), height_deg=round(width * web.height / web.width, 3),
                  rotation=round(rot, 2), v=int(time.time()), image=f"photos/{pid}.jpg", thumb=f"photos/thumbs/{pid}.jpg")
+    if flip:
+        entry["flip"] = True
     cp = ROOT / "catalog.json"
     cat = [c for c in json.loads(cp.read_text()) if c["id"] != pid] + [entry]
     cp.write_text(json.dumps(cat, indent=1))
@@ -200,7 +225,7 @@ def main():
     a.add_argument("--template", metavar="NAME", help="create import/NAME.json to fill in")
     a.add_argument("--list", action="store_true"); a.add_argument("--remove", metavar="ID")
     a.add_argument("--remove-samples", action="store_true", help="remove all sample photographs (ids starting with sample-)")
-    a.add_argument("--max-size", type=int, default=2400); a.add_argument("--push", action="store_true")
+    a.add_argument("--max-size", type=int, default=2400); a.add_argument("--push", action="store_true"); a.add_argument("--no-check", action="store_true", help="skip the star check")
     a.add_argument("--notes", help=argparse.SUPPRESS)
     for f in FIELDS:
         a.add_argument("--" + f.replace("_", "-"), dest=f)
@@ -234,7 +259,7 @@ def main():
                 for p in files:
                     print(f"{p.name}:")
                     try:
-                        add_photo(p, {**sidecar(p), **cli}, key, o.max_size)
+                        add_photo(p, {**sidecar(p), **cli}, key, o.max_size, check=not o.no_check)
                         for q in (p, p.with_suffix(".json")):
                             if q.exists():
                                 shutil.move(str(q), str(IMPORT / "done" / q.name))
@@ -244,7 +269,7 @@ def main():
             else:
                 if not o.image:
                     a.error("give a photo, or use --all, --template, --list or --remove")
-                add_photo(o.image, {**sidecar(o.image), **cli}, key, o.max_size)
+                add_photo(o.image, {**sidecar(o.image), **cli}, key, o.max_size, check=not o.no_check)
         if o.push:
             for c in (["git", "add", "-A"], ["git", "commit", "-m", "Update photographs"], ["git", "push"]):
                 subprocess.run(c, cwd=ROOT, check=True)

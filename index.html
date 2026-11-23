@@ -132,7 +132,7 @@ function draw(){
   if(p[0]<-Math.max(m,MIN)||p[0]>W+Math.max(m,MIN)||p[1]<-Math.max(m,MIN)||p[1]>H+Math.max(m,MIN))continue;
   (m<MIN?small:big).push({e,p,w,h,m,th:Math.atan2(nx,-ny)})}
  big.sort((a,b)=>b.m-a.m);
- for(const{e,p,w,h,m,th}of big){ctx.save();ctx.translate(p[0],p[1]);ctx.rotate(th-(e.rotation||0)*D);const u=(m*dpr>380&&img(U(e,'image')))||img(U(e,'thumb'));
+ for(const{e,p,w,h,m,th}of big){ctx.save();ctx.translate(p[0],p[1]);ctx.rotate(th+(e.rotation||0)*D);if(e.flip)ctx.scale(-1,1);const u=(m*dpr>380&&img(U(e,'image')))||img(U(e,'thumb'));
   if(u)ctx.drawImage(u,-w/2,-h/2,w,h);ctx.strokeStyle='rgba(235,235,225,.35)';ctx.strokeRect(-w/2,-h/2,w,h);ctx.restore();hits.push({es:[e],x:p[0],y:p[1],r:m/2})}
  // Photographs too small to show at true size become thumbnails; neighbours are merged into one marker with a count.
  const cl=[];for(const it of small){const c=cl.find(c=>Math.hypot(c.x-it.p[0],c.y-it.p[1])<MIN*.55);c?c.items.push(it):cl.push({x:it.p[0],y:it.p[1],items:[it]})}
@@ -200,7 +200,7 @@ function openLB(e){lbItem=e;$('#tip').style.display='none';const L=$('#lb-img');
   sec('Wiki',story+(story&&e.story_credit?`<p class="src">${esc(e.story_credit)}</p>`:''))+
   sec('How it was captured',facts([['Sub-exposure',e.sub_exposure_seconds?fmtExp(e.sub_exposure_seconds):''],['Frames',e.frames],['Filters',e.filters],['Mosaic',e.mosaic===true?'Yes':e.mosaic],['Field of view',fov],['Constellation',e.constellation]]))+
   `<div class="btns"><button id="lb-cosmos">Show on cosmos</button><button id="lb-x">Close</button></div>`;
- $('#lb').classList.add('open');$('#lb-x').onclick=closeLB;$('#lb-x').focus();
+ $('#lb').classList.add('open');$('#lb-x').onclick=closeLB;const info=$('#lb-info');$('#lb-x').focus({preventScroll:true});info.scrollTop=0;requestAnimationFrame(()=>{info.scrollTop=0});
  $('#lb-cosmos').onclick=()=>{closeLB();tab('cosmos');fly({ra:e.ra,dec:e.dec,fov:clamp(Math.max(e.width_deg,e.height_deg)*3.2,5,120)})}}
 function closeLB(){$('#lb').classList.remove('open');lbItem=null}
 $('#lb').addEventListener('click',e=>{if(e.target.id=='lb'||e.target.classList.contains('pic')||e.target.id=='lb-img')closeLB()});

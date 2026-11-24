@@ -9,17 +9,13 @@ See README.md for the full guide. Quick reference:
   python3 tools/add_photo.py --remove ID           remove a photo
   python3 tools/add_photo.py --remove-samples      remove all sample photos
 Add --push to commit and push to GitHub afterwards.
+Add --check to also run the optional star check that looks for mirrored photos (needs numpy; see check_orientation.py).
 Needs: pip install requests pillow
 """
 import argparse, json, math, os, re, shutil, subprocess, sys, tempfile, time
 from pathlib import Path
 import requests
 from PIL import Image, ImageOps
-
-try:
-    import orient  # needs numpy; double-checks orientation and mirroring against a star catalogue
-except ImportError:
-    orient = None
 
 ROOT = Path(__file__).resolve().parent.parent
 IMPORT = ROOT / "import"
@@ -139,7 +135,7 @@ def solve(path, key, hint, log):
     return c["ra"], c["dec"], c["pixscale"], c["orientation"], c.get("parity")
 
 
-def add_photo(image, meta, key=None, max_size=2400, log=print, check=True, mirror="ask"):
+def add_photo(image, meta, key=None, max_size=2400, log=print, check=False, mirror="ask"):
     image = Path(image)
     m = {k: v for k, v in meta.items() if not blank(v)}
     if "story" not in m and "notes" in m:
@@ -173,32 +169,36 @@ def add_photo(image, meta, key=None, max_size=2400, log=print, check=True, mirro
         width = ps * small.width / 3600
     flip = str(m.get("flip", "")).lower() in ("1", "true", "yes")
     declined = str(m.get("flip", "")).lower() in ("0", "false", "no")   # "flip": false in the JSON file means you already decided
-    if check and orient is not None:   # does the picture's star pattern agree with the position and rotation from astrometry.net?
+    if check:   # optional extra (--check): do the stars in the picture agree with the position and rotation from astrometry.net?
         try:
-            r = orient.verify(im, ra, dec, width, width * im.height / im.width)
-            verdict, why = orient.decide(r, (-rot) % 360, flip)
-            if verdict == "ok":
-                log(f"  Star check: orientation confirmed ({why}).")
-            elif verdict == "fix" and r["mirror"] != flip and "flip" not in m:
-                choice = ask_mirror(why, mirror)
-                if choice == "flip":
-                    flip = True
-                    log("  You chose: show it flipped on the Cosmos tab.")
-                elif choice == "decline":
-                    declined = True
-                    log("  You chose: show it as it is (it will not line up with the stars).")
+            import orient   # imported only here; needs numpy
+        except ImportError:
+            orient = None
+            log("  Star check skipped: it needs numpy ('pip install numpy').")
+        if orient is not None:
+            try:
+                r = orient.verify(im, ra, dec, width, width * im.height / im.width)
+                verdict, why = orient.decide(r, (-rot) % 360, flip)
+                if verdict == "ok":
+                    log(f"  Star check: orientation confirmed ({why}).")
+                elif verdict == "fix" and r["mirror"] != flip and "flip" not in m:
+                    choice = ask_mirror(why, mirror)
+                    if choice == "flip":
+                        flip = True
+                        log("  You chose: show it flipped on the Cosmos tab.")
+                    elif choice == "decline":
+                        declined = True
+                        log("  You chose: show it as it is (it will not line up with the stars).")
+                    else:
+                        raise SkipPhoto("skipped so that you can review it")
+                elif verdict == "fix":
+                    log(f"  WARNING: the star check disagrees with the rotation from astrometry.net ({why}). Look at the photo in the Cosmos tab; you can set rotation yourself.")
                 else:
-                    raise SkipPhoto("skipped so that you can review it")
-            elif verdict == "fix":
-                log(f"  WARNING: the star check disagrees with the rotation from astrometry.net ({why}). Look at the photo in the Cosmos tab; you can set rotation yourself.")
-            else:
-                log(f"  Star check: {why}; orientation not verified.")
-        except SkipPhoto:
-            raise
-        except Exception as e:
-            log(f"  Star check skipped ({e})")
-    elif check:
-        log("  (Install numpy with 'pip install numpy' to let the script double-check orientation and mirroring against a star catalogue.)")
+                    log(f"  Star check: {why}; orientation not verified.")
+            except SkipPhoto:
+                raise
+            except Exception as e:
+                log(f"  Star check skipped ({e})")
     obj, how = find_object([m.get("designation"), m.get("hint"), title], ra, dec, max(width, width * im.height / im.width))
     if obj:
         log(f"  Catalog match ({how}): {obj[0]}, {TYPES.get(obj[1], 'Other')}" + (f", Messier {obj[5]}" if obj[5] else "") + (f", Caldwell {obj[6]}" if obj[6] else ""))
@@ -258,8 +258,8 @@ def main():
     a.add_argument("--template", metavar="NAME", help="create import/NAME.json to fill in")
     a.add_argument("--list", action="store_true"); a.add_argument("--remove", metavar="ID")
     a.add_argument("--remove-samples", action="store_true", help="remove all sample photographs (ids starting with sample-)")
-    a.add_argument("--max-size", type=int, default=2400); a.add_argument("--push", action="store_true"); a.add_argument("--no-check", action="store_true", help="skip the star check")
-    a.add_argument("--mirror", choices=["ask", "flip", "decline", "skip"], default="ask", help="what to do with photos that look mirrored (default: ask)")
+    a.add_argument("--max-size", type=int, default=2400); a.add_argument("--push", action="store_true"); a.add_argument("--check", action="store_true", help="run the optional star check that looks for mirrored photos (needs numpy)"); a.add_argument("--no-check", action="store_true", help=argparse.SUPPRESS)
+    a.add_argument("--mirror", choices=["ask", "flip", "decline", "skip"], default="ask", help="what to do with a photo the star check finds mirrored (used with --check; default: ask)")
     a.add_argument("--notes", help=argparse.SUPPRESS)
     for f in FIELDS:
         a.add_argument("--" + f.replace("_", "-"), dest=f)
@@ -293,7 +293,7 @@ def main():
                 for p in files:
                     print(f"{p.name}:")
                     try:
-                        add_photo(p, {**sidecar(p), **cli}, key, o.max_size, check=not o.no_check, mirror=o.mirror)
+                        add_photo(p, {**sidecar(p), **cli}, key, o.max_size, check=o.check and not o.no_check, mirror=o.mirror)
                         for q in (p, p.with_suffix(".json")):
                             if q.exists():
                                 shutil.move(str(q), str(IMPORT / "done" / q.name))
@@ -306,7 +306,7 @@ def main():
                 if not o.image:
                     a.error("give a photo, or use --all, --template, --list or --remove")
                 try:
-                    add_photo(o.image, {**sidecar(o.image), **cli}, key, o.max_size, check=not o.no_check, mirror=o.mirror)
+                    add_photo(o.image, {**sidecar(o.image), **cli}, key, o.max_size, check=o.check and not o.no_check, mirror=o.mirror)
                 except SkipPhoto as e:
                     sys.exit(f"Skipped: {e}. Nothing was added.")
         if o.push:

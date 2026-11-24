@@ -7,13 +7,13 @@ Folder map:
 - `catalog.json`: the list of photographs (this is the database)
 - `photos/` and `photos/thumbs/`: the web-sized photos and thumbnails (made by the script)
 - `data/`: star, constellation and Milky Way data
-- `tools/`: the import script, a local preview server and the object catalog (run on your computer only)
+- `tools/`: the import script (`add_photo.py`), an optional orientation check (`check_orientation.py`, which uses the helper module `orient.py`; you never run `orient.py` yourself), a local preview server and the object catalog (run on your computer only)
 - `import/`: your drop folder for new photos (never uploaded to the website or GitHub)
 - `CNAME`: tells GitHub Pages to use cosmos.ckyr.us (only needed for GitHub hosting)
 
 ## 1. One-time setup
 
-1. Install Python 3, then run `pip install requests pillow numpy`. (numpy is only needed for the orientation check described under "Rotation, mirrored photos and the star check"; everything else works without it.)
+1. Install Python 3, then run `pip install requests pillow`. (The optional orientation check also needs numpy: `pip install numpy`. Nothing else does.)
 2. Get a free astrometry.net API key: sign in at https://nova.astrometry.net and open the API page of your account.
 3. Give the script the key, either way:
    - Save it as the only line of a text file named `tools/api_key.txt` (ignored by git, so it never goes to GitHub), or
@@ -69,7 +69,7 @@ Open it in any text editor. Leave out or empty any field you don't need: empty f
 | `object_type`, `messier`, `caldwell` | Normally filled in automatically (see below). Set them to override. |
 | `constellation` | Optional text. |
 | `ra`, `dec`, `width_deg`, `rotation` | Skip astrometry.net and use your own position. `ra` and `dec` are in decimal degrees (J2000), `width_deg` is the width of the image on the sky, and `rotation` is the angle astrometry.net reports for the picture: the page turns the photo clockwise by this many degrees from the north-up position. `ra`, `dec` and `width_deg` must all be given. |
-| `flip` | `true` shows the photo flipped on the Cosmos tab because it is a mirror image of the sky; `false` shows it as it is (you decided not to flip it). Leave it out and, if the star check finds a mirror image, the script asks you what to do (see "Rotation, mirrored photos and the star check"). The JPEG itself is never changed. |
+| `flip` | `true` shows the photo flipped on the Cosmos tab because it is a mirror image of the sky; `false` shows it as it is (you decided not to flip it). Leave it out for normal photos. The optional star check can find mirror images and ask you what to do (see "Rotation, mirrored photos and the optional star check"). The JPEG itself is never changed. |
 
 Details also appear on the site automatically: the field of view (the arc on the sky) comes from the solve, and the position is shown in right ascension and declination.
 
@@ -85,8 +85,8 @@ Every field above can also be given on the command line, with `--` and dashes in
 | `python3 tools/add_photo.py --remove ID` | Removes a photo: its catalog entry, web copy and thumbnail. |
 | `python3 tools/add_photo.py --remove-samples` | Removes all the sample photos. |
 | `--max-size 2400` | Longest side of the web copy in pixels (default 2400). |
-| `--mirror ask` (or `flip`, `decline`, `skip`) | What to do with a photo that looks like a mirror image of the sky. The default is to ask you. The other three answer in advance for a whole batch. |
-| `--no-check` | Skip the star check that looks for mirrored photos. |
+| `--check` | Also run the optional star check on each new photo, which looks for mirrored photos (needs numpy; see "Rotation, mirrored photos and the optional star check"). Off by default. |
+| `--mirror ask` (or `flip`, `decline`, `skip`) | Used with `--check`: what to do with a photo the star check finds mirrored. The default is to ask you. The other three answer in advance for a whole batch. |
 | `--push` | After the change, runs `git add -A`, `git commit` and `git push` (needs the setup in section 6). It does not pull first, so if GitHub rejects the push, follow Option 2 in "Publishing updates" (section 6). |
 
 ### Photo ids, editing and adding more photos of the same object
@@ -128,15 +128,20 @@ You can add a field that the photo does not have yet in the same way, with the s
 3. Include every field again. The entry is rebuilt from the JSON file, so anything you leave out (location, story, distance and so on) is lost, except what is filled in automatically.
 4. Run `python3 tools/add_photo.py --all`. The old image and thumbnail are overwritten, and the photo is solved again.
 
-### Rotation, mirrored photos and the star check
-astrometry.net tests both a normal and a mirrored version of every photo, so it can solve a picture that is a mirror image of the sky (for example one flipped during editing). It reports the angle as a number that the page applies as a clockwise turn from the north-up position, and a "parity" value that says whether the picture is mirrored. The script now logs the parity, but the parity numbers are not documented clearly enough to rely on, so the script checks it another way: if numpy is installed, it compares the stars in your photo with a star catalogue (about 41,000 stars) and tests every rotation, with and without mirroring. The log then says one of three things:
-- "orientation confirmed": the stars match the position and rotation, nothing changes.
-- "This photo looks like a MIRROR IMAGE of the sky": the script stops and asks. You choose **a** to show it flipped on the Cosmos tab (it saves `"flip": true`), **b** to decline (it is shown as it is and will not line up with the stars; it saves `"flip": false` so you are not asked again), or **c** to skip the photo for now so you can review it. A skipped photo stays in the `import/` folder and nothing is added to the catalog. If there is no keyboard to ask (for example the script runs in the background), mirrored photos are skipped. You can also decide beforehand: put `"flip": true` or `"flip": false` in the photo's JSON file, or run the whole batch with `--mirror flip`, `--mirror decline` or `--mirror skip`. In every case the JPEG you exported is never flipped or edited; the flip happens only when the page draws the photo on the Cosmos tab.
-- "not conclusive": the frame has too few bright catalogue stars (common for small fields), so nothing is changed. If you know a photo is mirrored, add `"flip": true` to its JSON file or its entry in `catalog.json`.
+### Rotation, mirrored photos and the optional star check
+**Rotation needs nothing from you.** The angle astrometry.net reports is applied by the page as a clockwise turn from the north-up position (checked against the star patterns of real photos), so normal photos line up on their own.
 
-To check photos that are already in the catalog, run `python3 tools/check_orientation.py` (add `--fix` to mark mirrored photos, or `--id ID` for one photo). Use `--no-check` when adding a photo to skip the check.
+**Mirrored photos are rare.** astrometry.net can solve a picture that is a mirror image of the sky, for example one that was flipped while editing, but the script does not act on that. If you know a photo is mirrored, put `"flip": true` in its JSON file or in its entry in `catalog.json`, and the page flips it when it draws it on the Cosmos tab. Use `"flip": false` to record that you looked and chose not to flip it. Your JPEG is never flipped or edited.
 
-If the page ever shows a photo turned the wrong way while the stars check says "ok", compare it with a wide-field picture of the same area, and send Claude the `rotation` value and what you see.
+**The star check is an optional extra.** It is off by default, so importing stays simple. It needs numpy (`pip install numpy`). It compares the stars in your photo with a star catalogue (about 41,000 stars down to magnitude 8) and tries every rotation, with and without mirroring. Run it in one of two ways:
+- `python3 tools/check_orientation.py` checks the photos already in the catalog. Add `--fix` to be asked about each photo that looks mirrored, or `--id ID` to check one photo.
+- `python3 tools/add_photo.py --all --check` also checks each new photo as it is added.
+
+For each photo it says "ok", "fix" or "unknown". **"Unknown" is normal and common.** The catalogue only holds bright stars (about one per square degree), so a frame one or two degrees wide often has fewer than the three matching stars needed, or the stars were reduced during processing. Nothing is changed for those photos. Only photos with enough bright stars get a verdict.
+
+When the check finds a mirror image, the script stops and asks. You choose **a** to show it flipped (it saves `"flip": true`), **b** to decline (it saves `"flip": false` so you are not asked again), or **c** to skip the photo for now so you can review it (it stays in `import/` and nothing is added to the catalog). If there is no keyboard to ask, the photo is skipped. To answer in advance for a whole batch, use `--mirror flip`, `--mirror decline` or `--mirror skip` together with `--check`, or put `"flip": true` or `"flip": false` in the photo's JSON file.
+
+If the page ever shows a photo turned the wrong way, compare it with a wide-field picture of the same area and send Claude the `rotation` value and what you see.
 
 ### Object type, Messier and Caldwell
 astrometry.net only provides the position, so the script gets the object type and the Messier and Caldwell numbers from OpenNGC, a catalog included in `tools/catalog.json`. It looks for a name in the designation, hint or title (M, NGC, IC, Messier, Caldwell), and otherwise takes the catalog object closest to the centre of the image. The log shows what was matched; if it is wrong, set `object_type`, `messier` or `caldwell` in the JSON file. Things not in OpenNGC, such as Sharpless, Barnard or LDN objects, get no type automatically: set `object_type` yourself. The Gallery tab can then filter by type and by Messier or Caldwell, and sort by catalog number. Objects OpenNGC lists as clusters with nebulosity are labelled "Emission nebula".
@@ -144,7 +149,7 @@ astrometry.net only provides the position, so the script gets the object type an
 Distance is not looked up automatically, so enter `distance_ly` yourself.
 
 ### If a solve fails
-Add the object name as `hint`, or give `ra`, `dec` and `width_deg` yourself. Heavy star removal and very tight crops can make solving fail. If a photo looks mirrored or turned the wrong way in the Cosmos tab, see "Rotation, mirrored photos and the star check" below.
+Add the object name as `hint`, or give `ra`, `dec` and `width_deg` yourself. Heavy star removal and very tight crops can make solving fail. If a photo looks mirrored or turned the wrong way in the Cosmos tab, see "Rotation, mirrored photos and the optional star check" below.
 
 ## 3. Remove photographs
 Run `python3 tools/add_photo.py --list` to see the ids, then `python3 tools/add_photo.py --remove ID`. The site comes with ten sample photographs (ids starting with `sample-`) that show how every field looks. Remove them all in one go with:

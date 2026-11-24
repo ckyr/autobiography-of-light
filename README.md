@@ -69,7 +69,7 @@ Open it in any text editor. Leave out or empty any field you don't need: empty f
 | `object_type`, `messier`, `caldwell` | Normally filled in automatically (see below). Set them to override. |
 | `constellation` | Optional text. |
 | `ra`, `dec`, `width_deg`, `rotation` | Skip astrometry.net and use your own position. `ra` and `dec` are in decimal degrees (J2000), `width_deg` is the width of the image on the sky, and `rotation` is the angle astrometry.net reports for the picture: the page turns the photo clockwise by this many degrees from the north-up position. `ra`, `dec` and `width_deg` must all be given. |
-| `flip` | `true` if the photo is a mirror image of the sky. It is normally set automatically (see "Rotation, mirrored photos and the star check"); set it by hand only if the check could not decide. |
+| `flip` | `true` shows the photo flipped on the Cosmos tab because it is a mirror image of the sky; `false` shows it as it is (you decided not to flip it). Leave it out and, if the star check finds a mirror image, the script asks you what to do (see "Rotation, mirrored photos and the star check"). The JPEG itself is never changed. |
 
 Details also appear on the site automatically: the field of view (the arc on the sky) comes from the solve, and the position is shown in right ascension and declination.
 
@@ -85,6 +85,8 @@ Every field above can also be given on the command line, with `--` and dashes in
 | `python3 tools/add_photo.py --remove ID` | Removes a photo: its catalog entry, web copy and thumbnail. |
 | `python3 tools/add_photo.py --remove-samples` | Removes all the sample photos. |
 | `--max-size 2400` | Longest side of the web copy in pixels (default 2400). |
+| `--mirror ask` (or `flip`, `decline`, `skip`) | What to do with a photo that looks like a mirror image of the sky. The default is to ask you. The other three answer in advance for a whole batch. |
+| `--no-check` | Skip the star check that looks for mirrored photos. |
 | `--push` | After the change, runs `git add -A`, `git commit` and `git push` (needs the setup in section 6). It does not pull first, so if GitHub rejects the push, follow Option 2 in "Publishing updates" (section 6). |
 
 ### Photo ids, editing and adding more photos of the same object
@@ -129,7 +131,7 @@ You can add a field that the photo does not have yet in the same way, with the s
 ### Rotation, mirrored photos and the star check
 astrometry.net tests both a normal and a mirrored version of every photo, so it can solve a picture that is a mirror image of the sky (for example one flipped during editing). It reports the angle as a number that the page applies as a clockwise turn from the north-up position, and a "parity" value that says whether the picture is mirrored. The script now logs the parity, but the parity numbers are not documented clearly enough to rely on, so the script checks it another way: if numpy is installed, it compares the stars in your photo with a star catalogue (about 41,000 stars) and tests every rotation, with and without mirroring. The log then says one of three things:
 - "orientation confirmed": the stars match the position and rotation, nothing changes.
-- "this photo is a MIRROR IMAGE of the sky and will be shown flipped": the entry gets `"flip": true` and the page mirrors the photo so that it lines up.
+- "This photo looks like a MIRROR IMAGE of the sky": the script stops and asks. You choose **a** to show it flipped on the Cosmos tab (it saves `"flip": true`), **b** to decline (it is shown as it is and will not line up with the stars; it saves `"flip": false` so you are not asked again), or **c** to skip the photo for now so you can review it. A skipped photo stays in the `import/` folder and nothing is added to the catalog. If there is no keyboard to ask (for example the script runs in the background), mirrored photos are skipped. You can also decide beforehand: put `"flip": true` or `"flip": false` in the photo's JSON file, or run the whole batch with `--mirror flip`, `--mirror decline` or `--mirror skip`. In every case the JPEG you exported is never flipped or edited; the flip happens only when the page draws the photo on the Cosmos tab.
 - "not conclusive": the frame has too few bright catalogue stars (common for small fields), so nothing is changed. If you know a photo is mirrored, add `"flip": true` to its JSON file or its entry in `catalog.json`.
 
 To check photos that are already in the catalog, run `python3 tools/check_orientation.py` (add `--fix` to mark mirrored photos, or `--id ID` for one photo). Use `--no-check` when adding a photo to skip the check.
@@ -295,7 +297,14 @@ The site discourages casual saving: no right-click menu or dragging on photos, a
 **Byline.** The name in "photos by ..." links to the Instagram page https://www.instagram.com/the.autobiography.of.light/ (opens in a new tab), so visitors can get in touch there. To change the link, look for `instagram.com` in `index.html`.
 
 ## 9. In the Cosmos tab: many photos close together
-Photos too small to show at true size appear as thumbnails. Neighbouring thumbnails merge into one marker with a count badge. Clicking it zooms in to separate different objects, or opens a list when the photos are of the same object. Zoomed in, photos are drawn at their real size and rotation, and clicking where several overlap opens the same list.
+Photos too small to show at true size appear as thumbnails. Neighbouring thumbnails merge into one marker with a count badge. Clicking it zooms in to separate different objects, or opens a list when the photos are of the same object. Zoomed in, photos are drawn at their real size and rotation.
+
+**Overlapping photos.** Where photos overlap, the smaller field is on top by default. Move the pointer over a photo and it comes to the front with a white outline, so you can see all of it, and moving away puts it back. Only the real outline of a photo counts, not a circle around it. **Identical frames** (the same place and size, for example two versions of the same shot) hide each other, so the top one shows a round count badge in its corner. Hover over the badge, or tap it on a phone, to open a list with a thumbnail of each photo and click one to open it. The same badge appears on merged thumbnails when zoomed out. Touch screens have no hover, so tapping a photo opens it as before.
+
+## Speed on desktop computers
+The Milky Way is drawn by the graphics card (WebGL), at the full resolution of your screen, so dragging and zooming stay smooth even in a large window. The page also redraws at most once per screen refresh however many mouse or trackpad events arrive, and it draws the constellation names with a thin dark outline instead of a blurred shadow, which is much cheaper. If a browser has no WebGL, or it fails, the page quietly falls back to the slower drawing on the processor, which is what older versions always used.
+- Add `?fps` to the address (for example `https://cosmos.ckyr.us/?fps`) to show a small readout of redraws per second, milliseconds per redraw and whether the Milky Way is drawn by the GPU or the CPU.
+- Add `?gl=0` to force the processor drawing, to compare the two.
 
 ## Changing the Milky Way image
 Two ready-made versions of `data/milkyway.jpg` exist: option A (4096x2048, about 0.7 MB) and option B (6144x3072, about 1.3 MB, more detail but about twice the memory in the browser, roughly 75 MB). To switch, copy the one you want into the `data` folder, name it exactly `milkyway.jpg` (replacing the old one), and push. To make visitors and your own browser pick up the new image immediately, also change `const V='6'` in `index.html` to a new value such as `'7'`. Test option B on your phone before publishing it: if the Milky Way background disappears there, go back to option A. When you stop moving, the page redraws the Milky Way at a higher quality, so it looks sharper at rest than while dragging.

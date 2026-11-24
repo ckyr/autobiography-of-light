@@ -35,6 +35,27 @@ TYPES = {"G": "Galaxy", "GPair": "Galaxy", "GTrpl": "Galaxy", "GGroup": "Galaxy"
          "**": "Double star", "Nova": "Nova"}
 
 
+class SkipPhoto(Exception):
+    """Raised when you choose to skip a photo so that you can review it first."""
+
+
+def ask_mirror(why, mode="ask"):
+    """What to do with a photo that looks like a mirror image of the sky: 'flip', 'decline' or 'skip'."""
+    if mode in ("flip", "decline", "skip"):
+        return mode
+    if not sys.stdin.isatty():
+        print("  This photo looks like a mirror image, and there is no keyboard to ask: skipping it for review.")
+        return "skip"
+    print(f"\n  This photo looks like a MIRROR IMAGE of the sky ({why}).")
+    print('    [a] Show it flipped on the Cosmos tab (saves "flip": true)')
+    print("    [b] Decline: show it as it is (it will not line up with the stars)")
+    print("    [c] Skip this photo for now, so you can review it (it stays in the import folder)")
+    while True:
+        c = input("  Choose a, b or c: ").strip().lower()
+        if c in ("a", "b", "c"):
+            return {"a": "flip", "b": "decline", "c": "skip"}[c]
+
+
 def slug(s):
     return re.sub(r"[^a-z0-9]+", "-", s.lower()).strip("-") or "photo"
 
@@ -118,7 +139,7 @@ def solve(path, key, hint, log):
     return c["ra"], c["dec"], c["pixscale"], c["orientation"], c.get("parity")
 
 
-def add_photo(image, meta, key=None, max_size=2400, log=print, check=True):
+def add_photo(image, meta, key=None, max_size=2400, log=print, check=True, mirror="ask"):
     image = Path(image)
     m = {k: v for k, v in meta.items() if not blank(v)}
     if "story" not in m and "notes" in m:
@@ -151,6 +172,7 @@ def add_photo(image, meta, key=None, max_size=2400, log=print, check=True):
             ra, dec, ps, rot, parity = solve(sp, key, hint, log)
         width = ps * small.width / 3600
     flip = str(m.get("flip", "")).lower() in ("1", "true", "yes")
+    declined = str(m.get("flip", "")).lower() in ("0", "false", "no")   # "flip": false in the JSON file means you already decided
     if check and orient is not None:   # does the picture's star pattern agree with the position and rotation from astrometry.net?
         try:
             r = orient.verify(im, ra, dec, width, width * im.height / im.width)
@@ -158,12 +180,21 @@ def add_photo(image, meta, key=None, max_size=2400, log=print, check=True):
             if verdict == "ok":
                 log(f"  Star check: orientation confirmed ({why}).")
             elif verdict == "fix" and r["mirror"] != flip and "flip" not in m:
-                flip = r["mirror"]
-                log(f"  Star check: this photo is {'a MIRROR IMAGE of the sky and will be shown flipped' if flip else 'not mirrored'} ({why}).")
+                choice = ask_mirror(why, mirror)
+                if choice == "flip":
+                    flip = True
+                    log("  You chose: show it flipped on the Cosmos tab.")
+                elif choice == "decline":
+                    declined = True
+                    log("  You chose: show it as it is (it will not line up with the stars).")
+                else:
+                    raise SkipPhoto("skipped so that you can review it")
             elif verdict == "fix":
                 log(f"  WARNING: the star check disagrees with the rotation from astrometry.net ({why}). Look at the photo in the Cosmos tab; you can set rotation yourself.")
             else:
                 log(f"  Star check: {why}; orientation not verified.")
+        except SkipPhoto:
+            raise
         except Exception as e:
             log(f"  Star check skipped ({e})")
     elif check:
@@ -188,6 +219,8 @@ def add_photo(image, meta, key=None, max_size=2400, log=print, check=True):
                  rotation=round(rot, 2), v=int(time.time()), image=f"photos/{pid}.jpg", thumb=f"photos/thumbs/{pid}.jpg")
     if flip:
         entry["flip"] = True
+    elif declined:
+        entry["flip"] = False   # reviewed and declined: the page does not flip it, and the check tool will not ask again
     cp = ROOT / "catalog.json"
     cat = [c for c in json.loads(cp.read_text()) if c["id"] != pid] + [entry]
     cp.write_text(json.dumps(cat, indent=1))
@@ -226,6 +259,7 @@ def main():
     a.add_argument("--list", action="store_true"); a.add_argument("--remove", metavar="ID")
     a.add_argument("--remove-samples", action="store_true", help="remove all sample photographs (ids starting with sample-)")
     a.add_argument("--max-size", type=int, default=2400); a.add_argument("--push", action="store_true"); a.add_argument("--no-check", action="store_true", help="skip the star check")
+    a.add_argument("--mirror", choices=["ask", "flip", "decline", "skip"], default="ask", help="what to do with photos that look mirrored (default: ask)")
     a.add_argument("--notes", help=argparse.SUPPRESS)
     for f in FIELDS:
         a.add_argument("--" + f.replace("_", "-"), dest=f)
@@ -255,21 +289,26 @@ def main():
                 if not files:
                     sys.exit(f"No photos found in {IMPORT}.")
                 (IMPORT / "done").mkdir(exist_ok=True)
-                failed = 0
+                failed = skipped = 0
                 for p in files:
                     print(f"{p.name}:")
                     try:
-                        add_photo(p, {**sidecar(p), **cli}, key, o.max_size, check=not o.no_check)
+                        add_photo(p, {**sidecar(p), **cli}, key, o.max_size, check=not o.no_check, mirror=o.mirror)
                         for q in (p, p.with_suffix(".json")):
                             if q.exists():
                                 shutil.move(str(q), str(IMPORT / "done" / q.name))
+                    except SkipPhoto as e:
+                        skipped += 1; print(f"  SKIPPED: {e}. It stays in import/.")
                     except (RuntimeError, OSError, requests.RequestException) as e:
                         failed += 1; print(f"  FAILED: {e}")
-                print(f"Done. {len(files) - failed} added, {failed} failed. Finished photos were moved to import/done/.")
+                print(f"Done. {len(files) - failed - skipped} added, {skipped} skipped for review, {failed} failed. Finished photos were moved to import/done/.")
             else:
                 if not o.image:
                     a.error("give a photo, or use --all, --template, --list or --remove")
-                add_photo(o.image, {**sidecar(o.image), **cli}, key, o.max_size, check=not o.no_check)
+                try:
+                    add_photo(o.image, {**sidecar(o.image), **cli}, key, o.max_size, check=not o.no_check, mirror=o.mirror)
+                except SkipPhoto as e:
+                    sys.exit(f"Skipped: {e}. Nothing was added.")
         if o.push:
             for c in (["git", "add", "-A"], ["git", "commit", "-m", "Update photographs"], ["git", "push"]):
                 subprocess.run(c, cwd=ROOT, check=True)

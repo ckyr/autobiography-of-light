@@ -18,7 +18,9 @@ h1{margin:0;font:italic 400 clamp(1.3rem,3.2vw,1.9rem)/1.1 var(--serif)}
 nav{padding-top:.3rem}
 nav button{background:none;border:0;border-bottom:1px solid transparent;color:var(--dim);padding:.15rem 0;margin-left:1.3rem;cursor:pointer}
 nav button[aria-current=true]{color:var(--ink);border-color:var(--ink)}
+#glsky{position:fixed;inset:0;width:100%;height:100%;pointer-events:none}
 #sky{position:fixed;inset:0;width:100%;height:100%;touch-action:none;cursor:grab}
+#fps{position:fixed;left:1.4rem;top:4.6rem;z-index:6;font:11px ui-monospace,Menlo,monospace;color:#9fb0d8;background:#0a0f1dcc;padding:.2rem .5rem;border-radius:3px}
 #sky.drag{cursor:grabbing}
 #ctl{position:fixed;left:1.4rem;bottom:1.1rem;z-index:4;display:flex;gap:1.2rem;flex-wrap:wrap;color:var(--dim);font-size:.85rem}
 #ctl label{display:flex;gap:.4rem;align-items:center;cursor:pointer}
@@ -32,7 +34,7 @@ nav button[aria-current=true]{color:var(--ink);border-color:var(--ink)}
 #pick span{font:.95rem/1.2 var(--serif)}#pick small{display:block;color:var(--dim);font:.75rem system-ui}
 #gal{position:fixed;inset:0;display:none;overflow:auto;padding:5.5rem 1.4rem 2.5rem}
 body[data-tab=gallery] #gal{display:block}
-body:not([data-tab=cosmos]) :is(#sky,#ctl,#hint){display:none}
+body:not([data-tab=cosmos]) :is(#sky,#glsky,#fps,#ctl,#hint){display:none}
 .search{max-width:1400px;margin:0 auto 1rem}
 .search input{width:min(100%,30rem);background:#0a0f1d;border:1px solid var(--line);border-radius:3px;padding:.5rem .8rem;color:var(--ink);font:inherit}
 .search input::placeholder{color:#6c7894}
@@ -67,10 +69,11 @@ body:not([data-tab=cosmos]) :is(#sky,#ctl,#hint){display:none}
 <body data-tab="cosmos">
 <header><div><h1>the autobiography of light</h1><p class="by">photos by <a href="https://www.instagram.com/the.autobiography.of.light/" target="_blank" rel="noopener noreferrer" title="the.autobiography.of.light on Instagram">Christos Kyratsous</a></p></div>
 <nav><button id="t-cosmos" aria-current="true">Cosmos</button><button id="t-gallery">Gallery</button></nav></header>
+<canvas id="glsky" aria-hidden="true"></canvas>
 <canvas id="sky" aria-label="Interactive map of the cosmos with astrophotographs"></canvas>
 <div id="ctl"><label><input type="checkbox" id="o-photos" checked>Photos</label><label><input type="checkbox" id="o-lines" checked>Constellations</label><label><input type="checkbox" id="o-names" checked>Names</label><label><input type="checkbox" id="o-grid" checked>Grid</label><button id="reset">Reset view</button></div>
 <div id="hint">Drag to look around, scroll or pinch to zoom, click a photograph.</div>
-<div id="tip"></div><div id="pick"></div>
+<div id="fps" hidden></div><div id="tip"></div><div id="pick"></div>
 <main id="gal"><div class="search"><input type="search" id="q" placeholder="Search by name, object, place, telescope or story" aria-label="Search photographs" autocomplete="off" spellcheck="false"></div><div class="bar"><span id="count"></span><span class="filters">
 <label>Catalog <select id="f-cat"><option value="all">All</option><option value="messier">Messier</option><option value="caldwell">Caldwell</option></select></label>
 <label>Type <select id="f-type"></select></label>
@@ -79,9 +82,11 @@ body:not([data-tab=cosmos]) :is(#sky,#ctl,#hint){display:none}
 <p class="credit">Milky Way: NASA Scientific Visualization Studio, Deep Star Maps 2020. Stars and constellation figures: d3-celestial by Olaf Frohn (BSD-3-Clause). Object types and Messier and Caldwell numbers: OpenNGC (CC-BY-SA 4.0). Coordinates are J2000.</p></main>
 <div id="lb" role="dialog" aria-modal="true" aria-label="Photograph"><div class="pic"><div id="lb-img" role="img"></div></div><aside id="lb-info"></aside></div>
 <script>
-const V='6',D=Math.PI/180,$=s=>document.querySelector(s),SERIF='"Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif',MIN=58;
+const V='6',QS=new URLSearchParams(location.search),D=Math.PI/180,$=s=>document.querySelector(s),SERIF='"Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif',MIN=58;
 const cv=$('#sky'),ctx=cv.getContext('2d'),ptrs=new Map(),imgs={},calm=matchMedia('(prefers-reduced-motion:reduce)').matches;
-let sky,cat=[],W,H,R,dpr=1,s0,c0,hits=[],drag=null,pd=0,lbItem=null;
+let sky,cat=[],W,H,R,dpr=1,s0,c0,hits=[],badges=[],hovE=null,queued=false,useGL=false,glReady=false,hideT=0,pickHover=false,pickKey='',drag=null,pd=0,lbItem=null;
+const fpsEl=QS.has('fps')?$('#fps'):null;let fN=0,fT=performance.now(),fMs=0;if(fpsEl)fpsEl.hidden=false;
+function meter(ms){fN++;fMs+=ms;const t=performance.now();if(t-fT>500){fpsEl.textContent=`${Math.round(fN*1000/(t-fT))} redraws/s | ${(fMs/fN).toFixed(1)} ms per redraw | Milky Way: ${useGL?'GPU':'CPU'}`;fN=0;fMs=0;fT=t}}
 const view={ra:300,dec:35,fov:100},home={...view},opts={photos:true,lines:true,names:true,grid:true},clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
 const esc=s=>String(Array.isArray(s)?s.join(', '):s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const U=(e,k)=>e[k]+(e.v?'?v='+e.v:'');
@@ -91,7 +96,7 @@ function P(ra,dec){const dl=(ra-view.ra)*D,p=dec*D,cp=Math.cos(p),sp=Math.sin(p)
  if(den<.2)return null;const k=2*R/den;return[W/2-k*cp*Math.sin(dl),H/2-k*(c0*sp-s0*cp*cd)]}
 function path(rings){for(const ring of rings){let pen=false;for(const[a,b]of ring){const p=P(a,b);if(!p){pen=false;continue}pen?ctx.lineTo(p[0],p[1]):ctx.moveTo(p[0],p[1]);pen=true}}}
 const MWG=1.0;let mwT,mwW,mwH,hq=false,hqT=0;const offs=[];const mwI=new Image();
-mwI.onload=()=>{mwW=mwI.width;mwH=mwI.height;const sw=1024,c=document.createElement('canvas'),x=c.getContext('2d',{willReadFrequently:true}),T=new Uint8ClampedArray(mwW*mwH*4);
+mwI.onload=()=>{mwW=mwI.width;mwH=mwI.height;if(glUpload()){useGL=true;draw();return}const sw=1024,c=document.createElement('canvas'),x=c.getContext('2d',{willReadFrequently:true}),T=new Uint8ClampedArray(mwW*mwH*4);
  for(let x0=0;x0<mwW;x0+=sw){const w=Math.min(sw,mwW-x0);c.width=w;c.height=mwH;x.drawImage(mwI,x0,0,w,mwH,0,0,w,mwH);const d=x.getImageData(0,0,w,mwH).data;for(let y=0;y<mwH;y++)T.set(d.subarray(y*w*4,(y+1)*w*4),(y*mwW+x0)*4)}
  mwT=T;draw()};mwI.src='data/milkyway.jpg?v='+V;
 // Draws the Milky Way photograph by inverting the projection for every pixel (rendered at low resolution, then scaled up).
@@ -107,67 +112,134 @@ function drawMW(){if(!mwT)return;const sc=hq?clamp(Math.sqrt(1.6e6/(W*H)),.4,.9)
   else{const k=(Math.min(mwH-1,Math.floor((90-ph/D)/180*mwH))*mwW+Math.floor(ra/360*mwW)%mwW)*4;
    o[n]=Math.min(255,mwT[k]*MWG);o[n+1]=Math.min(255,mwT[k+1]*MWG);o[n+2]=Math.min(255,mwT[k+2]*MWG)}}}
  offc.putImageData(id,0,0);ctx.globalCompositeOperation='lighter';ctx.imageSmoothingQuality='high';ctx.drawImage(off,0,0,W,H);ctx.globalCompositeOperation='source-over'}
-function drawMarker(e,x,y,badge,label){const ar=e.width_deg/e.height_deg,mw=ar>=1?MIN:MIN*ar,mh=ar>=1?MIN/ar:MIN,u=img(U(e,'thumb'));
+// ---- The Milky Way on the graphics card (WebGL): one small program inverts the projection for every pixel.
+// If WebGL is missing or fails, the slower drawing on the processor (drawMW below) is used instead. Add ?gl=0 to the address to force that.
+const GLSL=`#ifdef GL_FRAGMENT_PRECISION_HIGH
+precision highp float;
+#else
+precision mediump float;
+#endif
+uniform sampler2D tex;uniform vec2 res;uniform vec2 cssSize;uniform float scale;uniform float R;uniform float ra0;uniform float dec0;
+const float PI=3.14159265358979;
+void main(){
+ float x=gl_FragCoord.x/scale;float y=(res.y-gl_FragCoord.y)/scale;
+ float xi=cssSize.x*0.5-x;float eta=cssSize.y*0.5-y;
+ float rho=length(vec2(xi,eta));float c=2.0*atan(rho/(2.0*R));float sc=sin(c);float cc=cos(c);float s0=sin(dec0);float c0=cos(dec0);
+ float sp=clamp(cc*s0+eta*sc*c0/max(rho,1e-6),-1.0,1.0);float ph=asin(sp);
+ float dl=atan(xi*sc,rho*c0*cc-eta*s0*sc+1e-9);
+ float u=fract((ra0+dl)/(2.0*PI));float v=(0.5*PI-ph)/PI;
+ vec3 m=texture2D(tex,vec2(u,v)).rgb;
+ float t=clamp(length(vec2(x,y)-cssSize*0.5)/(0.7*max(cssSize.x,cssSize.y)),0.0,1.0);
+ vec3 bg=mix(vec3(0.0392,0.0627,0.1255),vec3(0.0118,0.0196,0.0392),t);
+ gl_FragColor=vec4(min(bg+m,vec3(1.0)),1.0);
+}`;
+const gc=$('#glsky');let gl,glp,glU,glTex;
+function glUpload(){
+ if(QS.get('gl')==='0')return false;
+ try{
+  if(!gl){
+   gl=gc.getContext('webgl',{antialias:false,alpha:false,depth:false,stencil:false,powerPreference:'high-performance'});
+   if(!gl)return false;
+   const sh=(t,src)=>{const o=gl.createShader(t);gl.shaderSource(o,src);gl.compileShader(o);if(!gl.getShaderParameter(o,gl.COMPILE_STATUS))throw new Error(gl.getShaderInfoLog(o));return o};
+   const vs=sh(gl.VERTEX_SHADER,'attribute vec2 p;void main(){gl_Position=vec4(p,0.,1.);}'),fs=sh(gl.FRAGMENT_SHADER,GLSL);
+   glp=gl.createProgram();gl.attachShader(glp,vs);gl.attachShader(glp,fs);gl.linkProgram(glp);
+   if(!gl.getProgramParameter(glp,gl.LINK_STATUS))throw new Error(gl.getProgramInfoLog(glp));
+   gl.useProgram(glp);const b=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,b);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array([-1,-1,1,-1,-1,1,1,1]),gl.STATIC_DRAW);
+   const loc=gl.getAttribLocation(glp,'p');gl.enableVertexAttribArray(loc);gl.vertexAttribPointer(loc,2,gl.FLOAT,false,0,0);
+   glU={};for(const n of['tex','res','cssSize','scale','R','ra0','dec0'])glU[n]=gl.getUniformLocation(glp,n);
+   gc.addEventListener('webglcontextlost',e=>{e.preventDefault();useGL=false;glReady=false;draw()});
+  }
+  const mx=gl.getParameter(gl.MAX_TEXTURE_SIZE);if(mwW>mx||mwH>mx)return false;
+  glTex=gl.createTexture();gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,glTex);gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,false);
+  gl.texImage2D(gl.TEXTURE_2D,0,gl.RGB,gl.RGB,gl.UNSIGNED_BYTE,mwI);
+  for(const[k,v]of[[gl.TEXTURE_MIN_FILTER,gl.LINEAR],[gl.TEXTURE_MAG_FILTER,gl.LINEAR],[gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE],[gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE]])gl.texParameteri(gl.TEXTURE_2D,k,v);
+  gl.uniform1i(glU.tex,0);glReady=true;return true;
+ }catch(err){console.warn('WebGL Milky Way unavailable, using the slower fallback:',err);glReady=false;return false}
+}
+function glDraw(){const w=gc.width,h=gc.height;gl.viewport(0,0,w,h);gl.useProgram(glp);gl.uniform2f(glU.res,w,h);gl.uniform2f(glU.cssSize,W,H);gl.uniform1f(glU.scale,w/W);gl.uniform1f(glU.R,R);gl.uniform1f(glU.ra0,view.ra*D);gl.uniform1f(glU.dec0,view.dec*D);gl.drawArrays(gl.TRIANGLE_STRIP,0,4)}
+function drawMarker(e,x,y,n,label,es,hl){const ar=e.width_deg/e.height_deg,mw=ar>=1?MIN:MIN*ar,mh=ar>=1?MIN/ar:MIN,u=img(U(e,'thumb'));
  ctx.fillStyle='#0a0f1d';ctx.fillRect(x-mw/2,y-mh/2,mw,mh);if(u)ctx.drawImage(u,x-mw/2,y-mh/2,mw,mh);
- ctx.strokeStyle='rgba(235,235,225,.75)';ctx.lineWidth=1;ctx.strokeRect(x-mw/2,y-mh/2,mw,mh);
+ ctx.strokeStyle=hl?'#fff':'rgba(235,235,225,.75)';ctx.lineWidth=hl?2:1;ctx.strokeRect(x-mw/2,y-mh/2,mw,mh);
  ctx.font='11px system-ui,sans-serif';ctx.fillStyle='#cdd5ea';ctx.textAlign='center';ctx.fillText(label,x,y+mh/2+14);
- if(badge>1){ctx.beginPath();ctx.arc(x+mw/2,y-mh/2,9,0,6.283);ctx.fillStyle='#e9e5d8';ctx.fill();ctx.fillStyle='#04060c';ctx.font='bold 11px system-ui,sans-serif';ctx.fillText(badge,x+mw/2,y-mh/2+4)}
+ if(n>1)badge(x+mw/2,y-mh/2,n,es);
  return Math.max(mw,mh)/2+4}
-function draw(){
- if(!sky||!W)return;ctx.setTransform(dpr,0,0,dpr,0,0);
- if(!hq){clearTimeout(hqT);hqT=setTimeout(()=>{if(document.body.dataset.tab=='cosmos'){hq=true;try{draw()}finally{hq=false}}},250)}   // idle: redraw the Milky Way at higher quality
- const g=ctx.createRadialGradient(W/2,H/2,0,W/2,H/2,Math.max(W,H)*.7);g.addColorStop(0,'#0a1020');g.addColorStop(1,'#03050a');ctx.fillStyle=g;ctx.fillRect(0,0,W,H);
+// A round count badge on stacked photographs; hovering over it lists them.
+function badge(x,y,n,es){ctx.beginPath();ctx.arc(x,y,10,0,6.283);ctx.fillStyle='#e9e5d8';ctx.fill();ctx.fillStyle='#04060c';ctx.font='bold 11px system-ui,sans-serif';ctx.textAlign='center';ctx.fillText(n,x,y+4);badges.push({x,y,r:10,es})}
+// draw() asks for a redraw; at most one happens per animation frame, however many mouse or wheel events arrive.
+function draw(){if(queued)return;queued=true;requestAnimationFrame(()=>{queued=false;render()})}
+function render(){
+ if(!sky||!W)return;const t0=performance.now();badges=[];ctx.setTransform(dpr,0,0,dpr,0,0);
+ if(!useGL&&!hq){clearTimeout(hqT);hqT=setTimeout(()=>{if(document.body.dataset.tab=='cosmos'){hq=true;try{render()}finally{hq=false}}},250)}   // processor drawing only: redraw sharper once you stop moving
  s0=Math.sin(view.dec*D);c0=Math.cos(view.dec*D);R=Math.min(W,H)/(4*Math.tan(view.fov*D/4));
- drawMW();
+ if(useGL&&glReady){ctx.clearRect(0,0,W,H);glDraw()}
+ else{const g=ctx.createRadialGradient(W/2,H/2,0,W/2,H/2,Math.max(W,H)*.7);g.addColorStop(0,'#0a1020');g.addColorStop(1,'#03050a');ctx.fillStyle=g;ctx.fillRect(0,0,W,H);drawMW()}
  if(opts.grid)drawGrid();
  if(opts.lines){ctx.strokeStyle='rgba(140,170,235,.55)';ctx.lineWidth=1;ctx.beginPath();for(const f of sky.lines)path(f);ctx.stroke()}
  const z=Math.log2(110/view.fov),lim=clamp(4.4+z*1.3,3.5,8),zf=clamp(1+.3*z,.7,3);
  for(const[a,b,m,bv]of sky.stars){if(m>lim)break;const p=P(a,b);if(!p||p[0]<-5||p[0]>W+5||p[1]<-5||p[1]>H+5)continue;
   ctx.fillStyle=bv<.3?'#cfe0ff':bv<.8?'#fff3dc':'#ffcf9a';ctx.globalAlpha=Math.max(.22,Math.min(1,.45+(6.5-m)*.2));ctx.beginPath();ctx.arc(p[0],p[1],Math.max(.55,(6.4-m)*.42*zf),0,6.283);ctx.fill()}
  ctx.globalAlpha=1;
- if(opts.names){ctx.font='italic 15px '+SERIF;ctx.fillStyle='rgba(185,200,235,.85)';ctx.shadowColor='#000';ctx.shadowBlur=4;ctx.textAlign='center';for(const[n,a,b]of sky.names){const p=P(a,b);if(p&&p[0]>0&&p[0]<W&&p[1]>0&&p[1]<H)ctx.fillText(n,p[0],p[1])}ctx.shadowBlur=0}
+ if(opts.names){ctx.font='italic 15px '+SERIF;ctx.fillStyle='rgba(185,200,235,.85)';ctx.lineWidth=3;ctx.lineJoin='round';ctx.strokeStyle='rgba(0,0,0,.7)';ctx.textAlign='center';for(const[n,a,b]of sky.names){const p=P(a,b);if(p&&p[0]>0&&p[0]<W&&p[1]>0&&p[1]<H){ctx.strokeText(n,p[0],p[1]);ctx.fillText(n,p[0],p[1])}}}
  hits=[];const big=[],small=[];
  for(const e of opts.photos?cat:[]){const p=P(e.ra,e.dec),q=P(e.ra,Math.min(89.9,e.dec+.05));if(!p||!q)continue;
   const nx=q[0]-p[0],ny=q[1]-p[1],sc=Math.hypot(nx,ny)/.05,w=e.width_deg*sc,h=e.height_deg*sc,m=Math.max(w,h);
   if(p[0]<-Math.max(m,MIN)||p[0]>W+Math.max(m,MIN)||p[1]<-Math.max(m,MIN)||p[1]>H+Math.max(m,MIN))continue;
   (m<MIN?small:big).push({e,p,w,h,m,th:Math.atan2(nx,-ny)})}
  big.sort((a,b)=>b.m-a.m);
- for(const{e,p,w,h,m,th}of big){ctx.save();ctx.translate(p[0],p[1]);ctx.rotate(th+(e.rotation||0)*D);if(e.flip)ctx.scale(-1,1);const u=(m*dpr>380&&img(U(e,'image')))||img(U(e,'thumb'));
-  if(u)ctx.drawImage(u,-w/2,-h/2,w,h);ctx.strokeStyle='rgba(235,235,225,.35)';ctx.strokeRect(-w/2,-h/2,w,h);ctx.restore();hits.push({es:[e],x:p[0],y:p[1],r:m/2})}
+ const drawBig=({e,p,w,h,m,th},hl)=>{const a=th+(e.rotation||0)*D;ctx.save();ctx.translate(p[0],p[1]);ctx.rotate(a);if(e.flip)ctx.scale(-1,1);const u=(m*dpr>380&&img(U(e,'image')))||img(U(e,'thumb'));
+  if(u)ctx.drawImage(u,-w/2,-h/2,w,h);ctx.lineWidth=hl?2:1;ctx.strokeStyle=hl?'rgba(255,255,255,.95)':'rgba(235,235,225,.35)';ctx.strokeRect(-w/2,-h/2,w,h);ctx.restore();
+  hits.push({es:[e],x:p[0],y:p[1],r:m/2,rect:{a,f:!!e.flip,w,h}})};
+ let front=null;for(const it of big){drawBig(it,false);if(it.e===hovE)front=it}
+ if(front)drawBig(front,true);   // the photograph under the pointer comes to the front, with an outline
+ // Identical frames (same place and size) hide each other: they get a count badge, and hovering over it lists them.
+ const stacks=[];for(const it of big){const st=stacks.find(q=>Math.hypot(q.p[0]-it.p[0],q.p[1]-it.p[1])<Math.max(4,.05*it.m)&&Math.abs(q.m-it.m)<.1*it.m);st?st.items.push(it):stacks.push({p:it.p,m:it.m,items:[it]})}
+ for(const st of stacks)if(st.items.length>1){const t=st.items[st.items.length-1],a=t.th+(t.e.rotation||0)*D,cx=(t.e.flip?-1:1)*t.w/2,cy=-t.h/2;badge(t.p[0]+cx*Math.cos(a)-cy*Math.sin(a),t.p[1]+cx*Math.sin(a)+cy*Math.cos(a),st.items.length,st.items.map(q=>q.e).reverse())}
  // Photographs too small to show at true size become thumbnails; neighbours are merged into one marker with a count.
  const cl=[];for(const it of small){const c=cl.find(c=>Math.hypot(c.x-it.p[0],c.y-it.p[1])<MIN*.55);c?c.items.push(it):cl.push({x:it.p[0],y:it.p[1],items:[it]})}
  for(const c of cl){c.items.sort((a,b)=>(b.e.date||'').localeCompare(a.e.date||''));const e=c.items[0].e,n=c.items.length;
-  const r=drawMarker(e,c.x,c.y,n,n>1?n+' photographs':(e.designation||e.title));hits.push({es:c.items.map(i=>i.e),x:c.x,y:c.y,r})}
+  const es=c.items.map(i=>i.e),r=drawMarker(e,c.x,c.y,n,n>1?n+' photographs':(e.designation||e.title),es,es.includes(hovE));hits.push({es,x:c.x,y:c.y,r})}
+ if(fpsEl)meter(performance.now()-t0)
 }
 // Equatorial grid (J2000): a line every 15 degrees of declination and every 2 hours of right ascension.
 function drawGrid(){ctx.strokeStyle='rgba(120,200,190,.38)';ctx.lineWidth=1;ctx.beginPath();
  for(let d=-75;d<=75;d+=15)path([Array.from({length:181},(_,i)=>[i*2,d])]);
  for(let a=0;a<360;a+=30)path([Array.from({length:91},(_,i)=>[a,-90+i*2])]);ctx.stroke();
- ctx.font='11px system-ui,sans-serif';ctx.fillStyle='rgba(150,220,210,.95)';ctx.textAlign='left';ctx.shadowColor='#000';ctx.shadowBlur=3;
+ ctx.font='11px system-ui,sans-serif';ctx.fillStyle='rgba(150,220,210,.95)';ctx.textAlign='left';ctx.lineWidth=3;ctx.lineJoin='round';ctx.strokeStyle='rgba(0,0,0,.7)';
  // Declination labels sit just above their line, right ascension labels just below theirs, so the two never collide where the lines cross.
- const cd=clamp(Math.round(view.dec/15)*15,-75,75),lab=(t,ra,de,dy)=>{const p=P(ra,de);if(p&&p[0]>0&&p[0]<W&&p[1]>0&&p[1]<H)ctx.fillText(t,p[0]+4,p[1]+dy)};
+ const cd=clamp(Math.round(view.dec/15)*15,-75,75),lab=(t,ra,de,dy)=>{const p=P(ra,de);if(p&&p[0]>0&&p[0]<W&&p[1]>0&&p[1]<H){ctx.strokeText(t,p[0]+4,p[1]+dy);ctx.fillText(t,p[0]+4,p[1]+dy)}};
  for(let d=-75;d<=75;d+=15)lab((d>0?'+':d<0?'−':'')+Math.abs(d)+'°',(Math.round(view.ra/30)*30+360)%360,d,-4);
- for(let a=0;a<360;a+=30)lab(a/15+'h',a,cd,13);
- ctx.shadowBlur=0}
-function resize(){dpr=window.devicePixelRatio||1;W=innerWidth;H=innerHeight;cv.width=W*dpr;cv.height=H*dpr;draw()}
-function hitsAt(x,y){const out=[];for(let i=hits.length-1;i>=0;i--){const h=hits[i];if(Math.hypot(x-h.x,y-h.y)<=h.r)for(const e of h.es)if(!out.includes(e))out.push(e)}return out}
+ for(let a=0;a<360;a+=30)lab(a/15+'h',a,cd,13)}
+function resize(){dpr=window.devicePixelRatio||1;W=innerWidth;H=innerHeight;cv.width=W*dpr;cv.height=H*dpr;const g=Math.min(dpr,2);gc.width=Math.round(W*g);gc.height=Math.round(H*g);draw()}
+// Everything under the pointer, topmost first. Photographs at true size are tested against their real (rotated) outline.
+function hitsAt(x,y){const out=[];for(let i=hits.length-1;i>=0;i--){const h=hits[i];let ok;
+ if(h.rect){const dx=x-h.x,dy=y-h.y,c=Math.cos(h.rect.a),s=Math.sin(h.rect.a);let lx=dx*c+dy*s;const ly=-dx*s+dy*c;if(h.rect.f)lx=-lx;ok=Math.abs(lx)<=h.rect.w/2&&Math.abs(ly)<=h.rect.h/2}
+ else ok=Math.hypot(x-h.x,y-h.y)<=h.r;
+ if(ok)for(const e of h.es)if(!out.includes(e))out.push(e)}return out}
 function pan(dx,dy){const k=R*D;view.ra=(view.ra+dx/(k*Math.max(.25,Math.cos(view.dec*D)))+360)%360;view.dec=clamp(view.dec+dy/k,-88,88);draw()}
 function zoom(f){view.fov=clamp(view.fov*f,1.5,120);draw()}
 function fly(t){if(calm){Object.assign(view,t);return draw()}const s={...view},dr=((t.ra-s.ra+540)%360)-180,t0=performance.now();
- (function f(n){const u=Math.min(1,(n-t0)/700),k=u*u*(3-2*u);view.ra=(s.ra+dr*k+360)%360;view.dec=s.dec+(t.dec-s.dec)*k;view.fov=s.fov*Math.pow(t.fov/s.fov,k);draw();if(u<1)requestAnimationFrame(f)})(t0)}
+ (function f(n){const u=Math.min(1,(n-t0)/700),k=u*u*(3-2*u);view.ra=(s.ra+dr*k+360)%360;view.dec=s.dec+(t.dec-s.dec)*k;view.fov=s.fov*Math.pow(t.fov/s.fov,k);render();if(u<1)requestAnimationFrame(f)})(t0)}
 const sep=(a,b)=>{const r=Math.acos(clamp(Math.sin(a.dec*D)*Math.sin(b.dec*D)+Math.cos(a.dec*D)*Math.cos(b.dec*D)*Math.cos((a.ra-b.ra)*D),-1,1));return r/D};
-function hidePick(){$('#pick').style.display='none'}
-function pick(es,x,y){const p=$('#pick');p.innerHTML=`<p>${es.length} photographs here</p>`+es.map((e,i)=>`<button data-i="${cat.indexOf(e)}"><img src="${esc(U(e,'thumb'))}" alt=""><span>${esc(e.title)}<small>${esc([e.designation,e.date].filter(Boolean).join(', '))}</small></span></button>`).join('');
+function hidePick(){clearTimeout(hideT);pickHover=false;pickKey='';$('#pick').style.display='none'}
+function pick(es,x,y,hover){const p=$('#pick');clearTimeout(hideT);pickHover=!!hover;pickKey=es.map(e=>e.id).join();p.innerHTML=`<p>${es.length} photographs here</p>`+es.map((e,i)=>`<button data-i="${cat.indexOf(e)}"><img src="${esc(U(e,'thumb'))}" alt=""><span>${esc(e.title)}<small>${esc([e.designation,e.date].filter(Boolean).join(', '))}</small></span></button>`).join('');
  p.style.display='block';p.style.left=clamp(x+12,8,W-p.offsetWidth-8)+'px';p.style.top=clamp(y+12,60,H-p.offsetHeight-8)+'px'}
+$('#pick').addEventListener('mouseenter',()=>clearTimeout(hideT));$('#pick').addEventListener('mouseleave',()=>{if(pickHover)hideT=setTimeout(hidePick,350)});
 $('#pick').onclick=e=>{const b=e.target.closest('button');if(b){hidePick();openLB(cat[+b.dataset.i])}};
-function activate(x,y){const es=hitsAt(x,y);if(!es.length)return;if(es.length==1)return openLB(es[0]);
+function activate(x,y){const bd=badges.find(b=>Math.hypot(x-b.x,y-b.y)<=b.r+3);if(bd)return pick(bd.es,bd.x,bd.y,false);const es=hitsAt(x,y);if(!es.length)return;if(es.length==1)return openLB(es[0]);
  // Several photographs: different targets, so zoom in to separate them; the same target, so offer a choice.
  const apart=es.some(a=>es.some(b=>sep(a,b)>.15));
  if(apart&&view.fov>4){const r0=es[0].ra,ra=r0+es.reduce((s,e)=>s+((e.ra-r0+540)%360-180),0)/es.length;fly({ra:(ra+360)%360,dec:es.reduce((s,e)=>s+e.dec,0)/es.length,fov:Math.max(view.fov*.3,3)})}
  else pick(es,x,y)}
 cv.addEventListener('pointerdown',e=>{hidePick();cv.setPointerCapture(e.pointerId);ptrs.set(e.pointerId,[e.clientX,e.clientY]);drag={moved:0};pd=0;cv.classList.add('drag')});
+function hover(x,y){const t=$('#tip'),bd=badges.find(b=>Math.hypot(x-b.x,y-b.y)<=b.r+3);
+ if(bd){t.style.display='none';cv.style.cursor='pointer';if(pickKey!==bd.es.map(e=>e.id).join()||$('#pick').style.display!=='block')pick(bd.es,bd.x,bd.y,true);else clearTimeout(hideT);return}
+ if(pickHover&&$('#pick').style.display==='block'){clearTimeout(hideT);hideT=setTimeout(hidePick,350)}
+ const es=hitsAt(x,y),top=es[0]||null;cv.style.cursor=es.length?'pointer':'';
+ if(top!==hovE){hovE=top;draw()}
+ t.style.display=es.length?'block':'none';if(es.length){t.textContent=es[0].title+(es.length>1?` (+${es.length-1} overlapping)`:'');t.style.left=x+14+'px';t.style.top=y+14+'px'}}
+cv.addEventListener('pointerleave',()=>{if(hovE){hovE=null;draw()}$('#tip').style.display='none'});
 cv.addEventListener('pointermove',e=>{const prev=ptrs.get(e.pointerId);
- if(!prev){const es=hitsAt(e.clientX,e.clientY),t=$('#tip');cv.style.cursor=es.length?'pointer':'';t.style.display=es.length?'block':'none';if(es.length){t.textContent=es.length>1?es.length+' photographs':es[0].title;t.style.left=e.clientX+14+'px';t.style.top=e.clientY+14+'px'}return}
+ if(!prev){hover(e.clientX,e.clientY);return}
  ptrs.set(e.pointerId,[e.clientX,e.clientY]);$('#tip').style.display='none';
  if(ptrs.size==2){const[a,b]=[...ptrs.values()],d=Math.hypot(a[0]-b[0],a[1]-b[1]);if(pd)zoom(pd/d);pd=d;drag.moved=99}
  else{const dx=e.clientX-prev[0],dy=e.clientY-prev[1];drag.moved+=Math.abs(dx)+Math.abs(dy);pan(dx,dy)}});

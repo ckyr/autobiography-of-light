@@ -196,7 +196,7 @@ function render(){
  for(const st of stacks)if(st.items.length>1){const t=st.items[st.items.length-1],a=t.th+(t.e.rotation||0)*D,cx=(t.e.flip?-1:1)*t.w/2,cy=-t.h/2;badge(t.p[0]+cx*Math.cos(a)-cy*Math.sin(a),t.p[1]+cx*Math.sin(a)+cy*Math.cos(a),st.items.length,st.items.map(q=>q.e).reverse())}
  // Photographs too small to show at true size become thumbnails; neighbours are merged into one marker with a count.
  const cl=[];for(const it of small){const c=cl.find(c=>Math.hypot(c.x-it.p[0],c.y-it.p[1])<MIN*.55);c?c.items.push(it):cl.push({x:it.p[0],y:it.p[1],items:[it]})}
- for(const c of cl){c.items.sort((a,b)=>(b.e.date||'').localeCompare(a.e.date||''));const e=c.items[0].e,n=c.items.length;
+ for(const c of cl){c.items.sort((a,b)=>(b.e.date||'').localeCompare(a.e.date||''));const e=(c.items.find(i=>i.e===hovE)||c.items[0]).e,n=c.items.length;
   const es=c.items.map(i=>i.e),r=drawMarker(e,c.x,c.y,n,n>1?n+' photographs':(e.designation||e.title),es,es.includes(hovE));hits.push({es,x:c.x,y:c.y,r})}
  if(fpsEl)meter(performance.now()-t0)
 }
@@ -220,10 +220,13 @@ function zoom(f){view.fov=clamp(view.fov*f,1.5,120);draw()}
 function fly(t){if(calm){Object.assign(view,t);return draw()}const s={...view},dr=((t.ra-s.ra+540)%360)-180,t0=performance.now();
  (function f(n){const u=Math.min(1,(n-t0)/700),k=u*u*(3-2*u);view.ra=(s.ra+dr*k+360)%360;view.dec=s.dec+(t.dec-s.dec)*k;view.fov=s.fov*Math.pow(t.fov/s.fov,k);render();if(u<1)requestAnimationFrame(f)})(t0)}
 const sep=(a,b)=>{const r=Math.acos(clamp(Math.sin(a.dec*D)*Math.sin(b.dec*D)+Math.cos(a.dec*D)*Math.cos(b.dec*D)*Math.cos((a.ra-b.ra)*D),-1,1));return r/D};
-function hidePick(){clearTimeout(hideT);pickHover=false;pickKey='';$('#pick').style.display='none'}
+function hidePick(){const was=$('#pick').style.display==='block';clearTimeout(hideT);pickHover=false;pickKey='';$('#pick').style.display='none';if(was)setHov(null)}
+function setHov(e){if(hovE!==e){hovE=e;draw()}}
 function pick(es,x,y,hover){const p=$('#pick');clearTimeout(hideT);pickHover=!!hover;pickKey=es.map(e=>e.id).join();p.innerHTML=`<p>${es.length} photographs here</p>`+es.map((e,i)=>`<button data-i="${cat.indexOf(e)}"><img src="${esc(U(e,'thumb'))}" alt=""><span>${esc(e.title)}<small>${esc([e.designation,e.date].filter(Boolean).join(', '))}</small></span></button>`).join('');
  p.style.display='block';p.style.left=clamp(x+12,8,W-p.offsetWidth-8)+'px';p.style.top=clamp(y+12,60,H-p.offsetHeight-8)+'px'}
-$('#pick').addEventListener('mouseenter',()=>clearTimeout(hideT));$('#pick').addEventListener('mouseleave',()=>{if(pickHover)hideT=setTimeout(hidePick,350)});
+$('#pick').addEventListener('mouseenter',()=>clearTimeout(hideT));$('#pick').addEventListener('mouseleave',()=>{setHov(null);if(pickHover)hideT=setTimeout(hidePick,350)});
+// Pointing at a photograph in the list brings that photograph to the front on the map, with the outline (or shows its thumbnail on a merged marker).
+for(const ev of['mouseover','focusin'])$('#pick').addEventListener(ev,e=>{const b=e.target.closest('button');if(b)setHov(cat[+b.dataset.i])});
 $('#pick').onclick=e=>{const b=e.target.closest('button');if(b){hidePick();openLB(cat[+b.dataset.i])}};
 function activate(x,y){const bd=badges.find(b=>Math.hypot(x-b.x,y-b.y)<=b.r+3);if(bd)return pick(bd.es,bd.x,bd.y,false);const es=hitsAt(x,y);if(!es.length)return;if(es.length==1)return openLB(es[0]);
  // Several photographs: different targets, so zoom in to separate them; the same target, so offer a choice.

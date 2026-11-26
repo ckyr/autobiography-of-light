@@ -196,7 +196,7 @@ function render(){
  for(const st of stacks)if(st.items.length>1){const t=st.items[st.items.length-1],a=t.th+(t.e.rotation||0)*D,cx=(t.e.flip?-1:1)*t.w/2,cy=-t.h/2;badge(t.p[0]+cx*Math.cos(a)-cy*Math.sin(a),t.p[1]+cx*Math.sin(a)+cy*Math.cos(a),st.items.length,st.items.map(q=>q.e).reverse())}
  // Photographs too small to show at true size become thumbnails; neighbours are merged into one marker with a count.
  const cl=[];for(const it of small){const c=cl.find(c=>Math.hypot(c.x-it.p[0],c.y-it.p[1])<MIN*.55);c?c.items.push(it):cl.push({x:it.p[0],y:it.p[1],items:[it]})}
- for(const c of cl){c.items.sort((a,b)=>(b.e.date||'').localeCompare(a.e.date||''));const e=(c.items.find(i=>i.e===hovE)||c.items[0]).e,n=c.items.length;
+ for(const c of cl){c.items.sort((a,b)=>dcmp(a.e,b.e,-1));const e=(c.items.find(i=>i.e===hovE)||c.items[0]).e,n=c.items.length;
   const es=c.items.map(i=>i.e),r=drawMarker(e,c.x,c.y,n,n>1?n+' photographs':(e.designation||e.title),es,es.includes(hovE));hits.push({es,x:c.x,y:c.y,r})}
  if(fpsEl)meter(performance.now()-t0)
 }
@@ -280,13 +280,17 @@ function openLB(e){lbItem=e;$('#tip').style.display='none';const L=$('#lb-img');
 function closeLB(){$('#lb').classList.remove('open');lbItem=null}
 $('#lb').addEventListener('click',e=>{if(e.target.id=='lb'||e.target.classList.contains('pic')||e.target.id=='lb-img')closeLB()});
 // Gallery: filter by catalog and type, sort by date, title, distance, catalog number or position.
+// Dates may be typed as 2026-11-04, 11-4-2026 or 11/04/2026 (month first, unless the first number is above 12). Undated photographs sort last.
+const dts=d=>{d=String(d||'').trim();let m=d.match(/^(\d{4})[-\/.](\d{1,2})[-\/.](\d{1,2})/);if(m)return Date.UTC(+m[1],+m[2]-1,+m[3]);
+ m=d.match(/^(\d{1,2})[-\/.](\d{1,2})[-\/.](\d{4})/);if(m){let a=+m[1],b=+m[2];if(a>12)[a,b]=[b,a];return Date.UTC(+m[3],a-1,b)}return null};
+const dcmp=(x,y,dir)=>{const a=dts(x.date),b=dts(y.date);return a===null?(b===null?0:1):b===null?-1:dir*(a-b)};
 const num=(e,f)=>f=='messier'?e.messier:f=='caldwell'?e.caldwell:(e.messier||e.caldwell),big=v=>v>0?v:Infinity,cmp=(a,b)=>a==b?0:a<b?-1:1;
 const hay=e=>[e.title,e.designation,e.object_type,e.location,e.telescope,e.constellation,e.date,e.filters,e.story,e.messier&&`messier ${e.messier} m${e.messier}`,e.caldwell&&`caldwell ${e.caldwell} c${e.caldwell}`,dist(e.distance_ly)].flat().filter(Boolean).join(' ').toLowerCase();
 function gallery(){const terms=$('#q').value.trim().toLowerCase().split(/\s+/).filter(Boolean),joined=terms.join(''),
  has=(h,t)=>/^\d+$/.test(t)?new RegExp('(^|\\D)'+t+'(\\D|$)').test(h):h.includes(t),
  match=e=>{if(!terms.length)return true;const h=hay(e);return terms.every(t=>has(h,t))||(terms.length>1&&h.replace(/\s+/g,'').includes(joined))},cf=$('#f-cat').value,tf=$('#f-type').value,k=$('#sort').value,ts=[...new Set(cat.map(e=>e.object_type).filter(Boolean))].sort();
  $('#f-type').innerHTML='<option value="all">All</option>'+ts.map(t=>`<option${t==tf?' selected':''}>${esc(t)}</option>`).join('');
- const a=cat.filter(e=>(cf=='all'||num(e,cf))&&(tf=='all'||!ts.includes(tf)||e.object_type==tf)&&match(e)),by={new:(x,y)=>(y.date||'').localeCompare(x.date||''),old:(x,y)=>(x.date||'').localeCompare(y.date||''),
+ const a=cat.filter(e=>(cf=='all'||num(e,cf))&&(tf=='all'||!ts.includes(tf)||e.object_type==tf)&&match(e)),by={new:(x,y)=>dcmp(x,y,-1),old:(x,y)=>dcmp(x,y,1),
   name:(x,y)=>x.title.localeCompare(y.title),ra:(x,y)=>x.ra-y.ra,dist:(x,y)=>cmp(big(x.distance_ly),big(y.distance_ly)),num:(x,y)=>cmp(big(num(x,cf)),big(num(y,cf)))};
  a.sort(by[k]);const ln=s=>s?`<span>${esc(s)}</span>`:'';
  $('#count').textContent=cat.length?(a.length<cat.length?`${a.length} of ${cat.length} photographs`:`${a.length} photograph${a.length>1?'s':''}`):'No photographs yet. See the README to add one.';

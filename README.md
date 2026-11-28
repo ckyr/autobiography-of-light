@@ -7,13 +7,13 @@ Folder map:
 - `catalog.json`: the list of photographs (this is the database)
 - `photos/` and `photos/thumbs/`: the web-sized photos and thumbnails (made by the script)
 - `data/`: star, constellation and Milky Way data
-- `tools/`: the import script (`add_photo.py`), an optional orientation check (`check_orientation.py`, which uses the helper module `orient.py`; you never run `orient.py` yourself), a local preview server and the object catalog (run on your computer only)
+- `tools/`: the import script (`add_photo.py`), the Moon and planet calculations (`skycalc.py`), an optional orientation check (`check_orientation.py`, which uses the helper module `orient.py`; you never run `skycalc.py` or `orient.py` yourself), a local preview server and the object catalog (run on your computer only)
 - `import/`: your drop folder for new photos (never uploaded to the website or GitHub)
 - `CNAME`: tells GitHub Pages to use cosmos.ckyr.us (only needed for GitHub hosting)
 
 ## 1. One-time setup
 
-1. Install Python 3, then run `pip install requests pillow`. (The optional orientation check also needs numpy: `pip install numpy`. Nothing else does.)
+1. Install Python 3, then run `pip install requests pillow`. Two optional extras: `pip install astronomy-engine` (calculates the phase, distance and so on for Moon and planet photos) and `pip install numpy` (the optional orientation check). On Windows, time zone names such as America/New_York also need `pip install tzdata`.
 2. Get a free astrometry.net API key: sign in at https://nova.astrometry.net and open the API page of your account.
 3. Give the script the key, either way:
    - Save it as the only line of a text file named `tools/api_key.txt` (ignored by git, so it never goes to GitHub), or
@@ -29,6 +29,36 @@ Folder map:
 5. Check the result locally (section 4), then publish (section 6 or 7).
 
 The script saves a web copy (longest side 2400 px, never enlarged, no EXIF or GPS data) as `photos/<id>.jpg` and a 400 px thumbnail in `photos/thumbs/`, and adds an entry to `catalog.json`.
+
+### Collections: deep sky, Moon, planets and night sky
+Every photograph belongs to one of four collections, set by its `category` field:
+
+| `category` | What it is | On the Cosmos map? | What the script does at import |
+|---|---|---|---|
+| `deepsky` | Nebulae, galaxies and clusters. This is the default: every photo already in your catalog is one. | Yes, placed by astrometry.net | Plate-solves it, looks up the object type and Messier/Caldwell numbers |
+| `moon` | Moon photos, any phase | No, gallery only | Calculates phase, illumination, age, distance and supermoon from the date and time |
+| `planets` | Mercury, Venus, Mars, Jupiter, Saturn, Uranus, Neptune | No, gallery only | Calculates distance, apparent size, illuminated percent and magnitude from the date and time |
+| `nightsky` | Wide-field night-sky photos and star trails | No, gallery only | Reads the camera details from the JPEG (EXIF) |
+
+**Your existing `catalog.json` needs no changes.** An entry without a `category` is treated as deep sky, and the page and the script both understand it. Only new Moon, planet and night-sky photos carry a category.
+
+**Templates with units.** Run `python3 tools/add_photo.py --template NAME --category moon` (or `planets`, or `nightsky`; without `--category` you get the deep-sky one) to create `import/NAME.json`. Four ready-made ones are also in the `import/` folder: `_template.json` (deep sky), `_template_moon.json`, `_template_planets.json` and `_template_nightsky.json`. Copy one, rename it to match the photo (`moon1.json` for `moon1.jpg`) and fill it in. The keys carry a note after " - " that says the unit or format, for example `"date - YYYY-MM-DD, the LOCAL date where you were; used for the calculations"`. The script ignores everything from the " - " on, so `date` and `date - YYYY-MM-DD` are the same field, and older JSON files keep working. A key starting with an underscore (`_read_me`) is ignored too. Empty fields are ignored.
+
+**Formats to use.**
+- `date`: `YYYY-MM-DD`, the local date where you were. (Other forms such as `11-4-2026` are understood, month first, and are stored as `YYYY-MM-DD`.)
+- `time_local`: `HH:MM:SS` on the 24-hour clock, the local clock time. `20:15` is fine too.
+- `timezone`: an IANA name such as `America/New_York` (best: it handles daylight saving by itself) or a UTC offset such as `-05:00`. If it is missing, the time is taken as UTC and the log says so.
+- Exposure times are in seconds, as numbers: 1/250 s is `0.004`, 30 seconds is `30`. `focal_length_mm` is in millimetres, `f_number` is the number only (`2.8` for f/2.8), `iso` is a whole number.
+
+**Moon and planet photos: what is calculated, and from what.**
+- The calculations use only `date`, `time_local` and `timezone`, converted to UTC (plus `planet` for planets). They are geocentric, the same wherever you stood, so **`location` is not needed** and is just a label that is shown. `telescope`, `camera` and the rest are never used for calculations.
+- Moon: `phase` (New Moon, Waxing crescent, First Quarter, Waxing gibbous, Full Moon, Waning gibbous, Last Quarter, Waning crescent), `illumination_percent`, `moon_age_days` (days since the new moon), `moon_distance_km`, `moon_angular_diameter_arcmin`, `supermoon` (set when the Moon is nearly full and closer than about 361,500 km), and `constellation`.
+- Planets: `planet_distance_au`, `planet_distance_million_km`, `apparent_diameter_arcsec` (the disk, without Saturn's rings), `illumination_percent`, `magnitude` and `constellation`.
+- If the time is missing, the script uses 12:00 on that date and says that the values can be off by up to half a day for the Moon.
+- To override any calculated value, add that key yourself (for example `"phase": "Full Moon"`); your value wins.
+- You need `pip install astronomy-engine` for this. Without it the photo is still added, with a note, and you can import it again after installing. On Windows, IANA time zone names also need `pip install tzdata`.
+
+**Night-sky photos.** If the JPEG still carries its camera data (Lightroom and Photoshop usually keep it), the script fills in `camera`, `lens`, `focal_length_mm`, `f_number`, `iso`, the exposure and the capture date, time and time zone for the fields you left empty. If you give `frames`, the exposure from the camera is taken as the length of one frame, so for star trails from StarStaX enter `frames` and (if the camera data is gone) `sub_exposure_seconds`; the total time is calculated, or enter `exposure_seconds` yourself. Fill in `subject` with what the photo shows (Star trails, Milky Way, Meteors, Aurora, Constellations, Landscape or Other), which becomes the Type menu in the gallery. Nothing is placed on the map, and GPS data is never copied from the JPEG.
 
 ### The details file (JSON)
 Open it in any text editor. Leave out or empty any field you don't need: empty fields are ignored. Keep the quotes and commas, and write a paragraph break in the story as `\n\n`.
@@ -66,6 +96,13 @@ Open it in any text editor. Leave out or empty any field you don't need: empty f
 | `filters` | Text, or a list of filters. Shown under "How it was captured", below the number of frames. |
 | `story` | The text under "Wiki" in the photo details (the field is still called `story`). You can write it yourself or adapt your own notes. Separate paragraphs with `\n\n`. See "Wiki text and credits" below. |
 | `story_credit` | Optional small credit line shown under the wiki text, for example "Description adapted from Wikipedia (CC BY-SA 4.0)". |
+| `category` | `deepsky` (the default), `moon`, `planets` or `nightsky`. See "Collections". |
+| `planet` | For planet photos: Mercury, Venus, Mars, Jupiter, Saturn, Uranus or Neptune. Used for the calculations. |
+| `subject` | For night-sky photos: what it shows (Star trails, Milky Way, Meteors, Aurora, Constellations, Landscape or Other). It becomes the Type menu in the gallery. (Filled in automatically for Moon and planet photos.) |
+| `time_local`, `timezone` | `HH:MM:SS` local clock time and the time zone (name like `America/New_York`, or offset like `-05:00`). Used for the Moon and planet calculations and shown in the details. |
+| `camera`, `lens` | Free text. For night-sky and Moon photos they are read from the JPEG if it carries them. |
+| `focal_length_mm`, `f_number`, `iso` | Millimetres, the number only (`2.8` for f/2.8), and a whole number. |
+| `software`, `seeing`, `direction` | Free text: processing software (for example StarStaX), seeing conditions (planets), and where the camera pointed (night sky). |
 | `object_type`, `messier`, `caldwell` | Normally filled in automatically (see below). Set them to override. |
 | `constellation` | Optional text. |
 | `ra`, `dec`, `width_deg`, `rotation` | Skip astrometry.net and use your own position. `ra` and `dec` are in decimal degrees (J2000), `width_deg` is the width of the image on the sky, and `rotation` is the angle astrometry.net reports for the picture: the page turns the photo clockwise by this many degrees from the north-up position. `ra`, `dec` and `width_deg` must all be given. |
@@ -80,7 +117,7 @@ Every field above can also be given on the command line, with `--` and dashes in
 |---|---|
 | `python3 tools/add_photo.py --all` | Adds every photo in `import/`. |
 | `python3 tools/add_photo.py PHOTO.jpg --title "..." ...` | Adds one photo (reads `PHOTO.json` next to it if present). Does not move files. |
-| `python3 tools/add_photo.py --template NAME` | Creates `import/NAME.json` with all fields. |
+| `python3 tools/add_photo.py --template NAME` | Creates `import/NAME.json` with all fields and the unit notes. Add `--category moon`, `planets` or `nightsky` for those kinds. |
 | `python3 tools/add_photo.py --list` | Lists the id and title of every photo in the catalog. |
 | `python3 tools/add_photo.py --remove ID` | Removes a photo: its catalog entry, web copy and thumbnail. |
 | `python3 tools/add_photo.py --remove-samples` | Removes all the sample photos. |
@@ -295,7 +332,7 @@ The site discourages casual saving: no right-click menu or dragging on photos, a
 ## Using the site
 **Cosmos tab.** Drag to look around, scroll or pinch to zoom, and click a photograph to open its details. The checkboxes at the bottom left switch Photos, Constellations, Names and Grid on and off (the grid starts switched on) (turn Photos off to read the constellation names behind them), and "Reset view" returns to the start. In the photo details, "Show on cosmos" flies to the photo's position.
 
-**Gallery tab.** The search box at the top filters as you type: it looks at the title, designation, object type, location, telescope, filters, constellation, date, wiki text and distance, and understands catalog numbers such as `m31` or `caldwell 20`. It works together with the Catalog and Type filters and the Sort menu (including closest first by distance and by catalog number).
+**Gallery tab.** The search box at the top filters as you type, and the number of photographs shown sits to its right. It looks at the title, designation, subject, object type, phase, location, camera, telescope, filters, constellation, date, wiki text and distance, and understands catalog numbers such as `m31` or `caldwell 20`. Under it, the buttons **All, Deep Sky, Moon, Planets and Night Sky - Star Trails** show one collection at a time (All is the default). The menus on the right change with the collection: Deep Sky and All offer Catalog, Type and Sort (including closest first by distance and by catalog number); Moon offers a Phase menu; Planets offers a Planet menu; Night Sky offers a Type menu (Star trails, Milky Way and so on). A menu only appears when the collection has at least two different values to choose from. Moon, Planets and Night Sky are sorted by Newest or Oldest. The lines under each photograph and the details panel also depend on the collection (see "Collections").
 
 **Stars.** About 41,000 stars are included. Only the brightest are drawn when the whole cosmos is in view, and fainter ones appear as you zoom in, so the view stays clean. Drawing stops at the first star that is too faint, so the extra stars cost almost nothing.
 
@@ -322,5 +359,6 @@ Browsers keep copies of files, which is why a refresh was needed while you teste
 
 ## Data credits
 - `data/sky.json` is derived from d3-celestial by Olaf Frohn (BSD-3-Clause, https://github.com/ofrohn/d3-celestial): about 41,000 stars down to magnitude 8, constellation lines and names. Fainter stars appear as you zoom in.
+- Moon and planet calculations use Astronomy Engine by Don Cross (MIT licence, https://github.com/cosinekitty/astronomy). It runs on your computer when you import a photo; nothing from it is published on the website.
 - `data/milkyway.jpg` is made from the Milky Way background of Deep Star Maps 2020 by NASA's Scientific Visualization Studio (https://svs.gsfc.nasa.gov/4851), tone-mapped, cleaned of faint-star grain and resized (4096x2048 or 6144x3072, see "Changing the Milky Way image") with RA 0h at the left edge.
 - `tools/catalog.json` is derived from OpenNGC by Mattia Verga (CC-BY-SA 4.0, https://github.com/mattiaverga/OpenNGC): object types and Messier and Caldwell numbers.

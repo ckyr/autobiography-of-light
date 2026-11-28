@@ -35,12 +35,18 @@ nav button[aria-current=true]{color:var(--ink);border-color:var(--ink)}
 #gal{position:fixed;inset:0;display:none;overflow:auto;padding:5.5rem 1.4rem 2.5rem}
 body[data-tab=gallery] #gal{display:block}
 body:not([data-tab=cosmos]) :is(#sky,#glsky,#fps,#ctl,#hint){display:none}
-.search{max-width:1400px;margin:0 auto 1rem}
+.top{display:flex;align-items:center;flex-wrap:wrap;gap:.5rem 1.2rem;max-width:1400px;margin:0 auto 1rem}
+.search{flex:0 1 30rem}
+#count{color:var(--dim)}
 .search input{width:min(100%,30rem);background:#0a0f1d;border:1px solid var(--line);border-radius:3px;padding:.5rem .8rem;color:var(--ink);font:inherit}
 .search input::placeholder{color:#6c7894}
 .empty{grid-column:1/-1;color:var(--dim);margin:0}
 .bar{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:.6rem 1.5rem;margin:0 auto 1.2rem;max-width:1400px;color:var(--dim)}
 .filters{display:flex;gap:.6rem 1.2rem;flex-wrap:wrap}
+.cats{display:inline-flex;max-width:100%;overflow-x:auto;gap:2px;padding:3px;background:#0a0f1d;border:1px solid var(--line);border-radius:12px}
+.cats button{background:none;border:0;border-radius:9px;padding:.35rem .9rem;color:var(--dim);cursor:pointer;white-space:nowrap}
+.cats button:hover{color:var(--ink)}
+.cats button[aria-pressed=true]{background:#2c3447;color:#f6f3e8}
 .bar select{background:#0a0f1d;border:1px solid var(--line);border-radius:3px;padding:.25rem .5rem}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:1.6rem 1.2rem;max-width:1400px;margin:0 auto}
 .card{background:none;border:0;padding:0;text-align:left;cursor:pointer}
@@ -74,10 +80,13 @@ body:not([data-tab=cosmos]) :is(#sky,#glsky,#fps,#ctl,#hint){display:none}
 <div id="ctl"><label><input type="checkbox" id="o-photos" checked>Photos</label><label><input type="checkbox" id="o-lines" checked>Constellations</label><label><input type="checkbox" id="o-names" checked>Names</label><label><input type="checkbox" id="o-grid" checked>Grid</label><button id="reset">Reset view</button></div>
 <div id="hint">Drag to look around, scroll or pinch to zoom, click a photograph.</div>
 <div id="fps" hidden></div><div id="tip"></div><div id="pick"></div>
-<main id="gal"><div class="search"><input type="search" id="q" placeholder="Search by name, object, place, telescope or story" aria-label="Search photographs" autocomplete="off" spellcheck="false"></div><div class="bar"><span id="count"></span><span class="filters">
-<label>Catalog <select id="f-cat"><option value="all">All</option><option value="messier">Messier</option><option value="caldwell">Caldwell</option></select></label>
-<label>Type <select id="f-type"></select></label>
-<label>Sort <select id="sort"><option value="new">Newest</option><option value="old">Oldest</option><option value="name">Title</option><option value="dist">Distance, closest first</option><option value="num">Catalog number</option><option value="ra">Right ascension</option></select></label></span></div>
+<main id="gal"><div class="top"><div class="search"><input type="search" id="q" placeholder="Search by name, object, place, telescope or story" aria-label="Search photographs" autocomplete="off" spellcheck="false"></div><span id="count"></span></div>
+<div class="bar"><div class="cats" id="cats" role="group" aria-label="Collection"><button data-c="all" aria-pressed="true">All</button><button data-c="deepsky" aria-pressed="false">Deep Sky</button><button data-c="moon" aria-pressed="false">Moon</button><button data-c="planets" aria-pressed="false">Planets</button><button data-c="nightsky" aria-pressed="false">Night Sky - Star Trails</button></div>
+<span class="filters">
+<label id="l-cat">Catalog <select id="f-cat"><option value="all">All</option><option value="messier">Messier</option><option value="caldwell">Caldwell</option></select></label>
+<label id="l-type">Type <select id="f-type"></select></label>
+<label id="l-sub" hidden><span id="sub-name">Phase</span> <select id="f-sub"></select></label>
+<label>Sort <select id="sort"></select></label></span></div>
 <div class="grid" id="grid"></div>
 <p class="credit">Milky Way: NASA Scientific Visualization Studio, Deep Star Maps 2020. Stars and constellation figures: d3-celestial by Olaf Frohn (BSD-3-Clause). Object types and Messier and Caldwell numbers: OpenNGC (CC-BY-SA 4.0). Coordinates are J2000.</p></main>
 <div id="lb" role="dialog" aria-modal="true" aria-label="Photograph"><div class="pic"><div id="lb-img" role="img"></div></div><aside id="lb-info"></aside></div>
@@ -181,7 +190,7 @@ function render(){
  ctx.globalAlpha=1;
  if(opts.names){ctx.font='italic 15px '+SERIF;ctx.fillStyle='rgba(185,200,235,.85)';ctx.lineWidth=3;ctx.lineJoin='round';ctx.strokeStyle='rgba(0,0,0,.7)';ctx.textAlign='center';for(const[n,a,b]of sky.names){const p=P(a,b);if(p&&p[0]>0&&p[0]<W&&p[1]>0&&p[1]<H){ctx.strokeText(n,p[0],p[1]);ctx.fillText(n,p[0],p[1])}}}
  hits=[];const big=[],small=[];
- for(const e of opts.photos?cat:[]){const p=P(e.ra,e.dec),q=P(e.ra,Math.min(89.9,e.dec+.05));if(!p||!q)continue;
+ for(const e of opts.photos?cat.filter(onMap):[]){const p=P(e.ra,e.dec),q=P(e.ra,Math.min(89.9,e.dec+.05));if(!p||!q)continue;
   const nx=q[0]-p[0],ny=q[1]-p[1],sc=Math.hypot(nx,ny)/.05,w=e.width_deg*sc,h=e.height_deg*sc,m=Math.max(w,h);
   if(p[0]<-Math.max(m,MIN)||p[0]>W+Math.max(m,MIN)||p[1]<-Math.max(m,MIN)||p[1]>H+Math.max(m,MIN))continue;
   (m<MIN?small:big).push({e,p,w,h,m,th:Math.atan2(nx,-ny)})}
@@ -260,23 +269,27 @@ addEventListener('dragstart',e=>{if(e.target.tagName=='IMG')e.preventDefault()})
 $('#o-photos').onchange=e=>{opts.photos=e.target.checked;$('#tip').style.display='none';hidePick();draw()};$('#o-lines').onchange=e=>{opts.lines=e.target.checked;draw()};$('#o-grid').onchange=e=>{opts.grid=e.target.checked;draw()};$('#o-names').onchange=e=>{opts.names=e.target.checked;draw()};$('#reset').onclick=()=>fly(home);
 setTimeout(()=>$('#hint').style.opacity=0,9000);
 // Formatting
-const fmtExp=s=>{s=Math.round(+s);if(!s)return'';const h=Math.floor(s/3600),m=Math.floor(s%3600/60),r=s%60;return[h&&h+' h',m&&m+' min',r&&r+' s'].filter(Boolean).join(' ')};
+const fmtExp=s=>{s=+s;if(!(s>0))return'';if(s<1){const r=Math.round(1/s);return Math.abs(1/s-r)<.03*r?`1/${r} s`:`${+s.toFixed(3)} s`}if(s<60&&Math.round(s)!==s)return`${+s.toFixed(1)} s`;s=Math.round(s);const h=Math.floor(s/3600),m=Math.floor(s%3600/60),r=s%60;return[h&&h+' h',m&&m+' min',r&&r+' s'].filter(Boolean).join(' ')};
 const dist=n=>!n?'':n>=1e6?`${+(n/1e6).toFixed(2)} million light years`:`${Math.round(n).toLocaleString('en-US')} light years`;
 function dms(ra,dec){const t=Math.round(ra/15*3600)%86400,s=dec<0?'−':'+',a=Math.round(Math.abs(dec)*60);
  return`${Math.floor(t/3600)}h ${Math.floor(t%3600/60)}m ${t%60}s, ${s}${Math.floor(a/60)}° ${a%60}′`}
 const tags=e=>[e.messier&&'Messier '+e.messier,e.caldwell&&'Caldwell '+e.caldwell].filter(Boolean).join(', ');
 // Lightbox
 const facts=r=>(r=r.filter(x=>x[1]),r.length?`<dl>${r.map(x=>`<dt>${x[0]}</dt><dd>${esc(x[1])}</dd>`).join('')}</dl>`:''),sec=(h,b)=>b?`<h4>${h}</h4>${b}`:'';
-function openLB(e){lbItem=e;$('#tip').style.display='none';const L=$('#lb-img');L.style.backgroundImage=`url("${U(e,'image')}")`;L.setAttribute('aria-label',e.title);
+function openLB(e){lbItem=e;$('#tip').style.display='none';const L=$('#lb-img'),c=catOf(e);L.style.backgroundImage=`url("${U(e,'image')}")`;L.setAttribute('aria-label',e.title);
  const story=String(e.story||'').split(/\n\s*\n/).filter(s=>s.trim()).map(s=>`<p>${esc(s)}</p>`).join(''),
   fov=e.width_deg?`${(+e.width_deg).toFixed(2)}° × ${(+e.height_deg).toFixed(2)}°`:'';
- $('#lb-info').innerHTML=`<h2>${esc(e.title)}</h2><p class="sub">${esc(e.designation)}</p>`+
-  facts([['Type',e.object_type],['Catalog',tags(e)],['Distance',dist(e.distance_ly)],['Position',dms(e.ra,e.dec)],['Date',e.date],['Location',e.location],['Telescope',e.telescope],['Exposure',fmtExp(e.exposure_seconds)]])+
-  sec('Wiki',story+(story&&e.story_credit?`<p class="src">${esc(e.story_credit)}</p>`:''))+
-  sec('How it was captured',facts([['Sub-exposure',e.sub_exposure_seconds?fmtExp(e.sub_exposure_seconds):''],['Frames',e.frames],['Filters',e.filters],['Mosaic',e.mosaic===true?'Yes':e.mosaic],['Field of view',fov],['Constellation',e.constellation]]))+
-  `<div class="btns"><button id="lb-cosmos">Show on cosmos</button><button id="lb-x">Close</button></div>`;
+ const top={
+  moon:[['Phase',e.phase],['Illumination',pct(e.illumination_percent)],['Moon age',e.moon_age_days!=null?`${e.moon_age_days} days`:''],['Distance',e.moon_distance_km?`${Math.round(e.moon_distance_km).toLocaleString('en-US')} km`:''],['Apparent size',e.moon_angular_diameter_arcmin?`${e.moon_angular_diameter_arcmin} arcminutes`:''],['Supermoon',e.supermoon?'Yes':''],['Constellation',e.constellation],['Date',e.date],['Local time',lt(e)],['UTC',utc(e)],['Location',e.location],['Telescope',e.telescope],['Exposure',fmtExp(e.exposure_seconds)]],
+  planets:[['Planet',e.subject],['Apparent size',e.apparent_diameter_arcsec?`${e.apparent_diameter_arcsec} arcseconds`:''],['Distance',e.planet_distance_au?`${e.planet_distance_au} AU (${e.planet_distance_million_km} million km)`:''],['Illuminated',pct(e.illumination_percent)],['Magnitude',e.magnitude],['Constellation',e.constellation],['Date',e.date],['Local time',lt(e)],['UTC',utc(e)],['Location',e.location],['Telescope',e.telescope],['Exposure',fmtExp(e.exposure_seconds)]],
+  nightsky:[['Subject',e.subject],['Date',e.date],['Local time',lt(e)],['Location',e.location],['Camera',e.camera],['Lens',e.lens],['Direction',e.direction],['Total time',fmtExp(e.exposure_seconds)]],
+  deepsky:[['Type',e.object_type],['Catalog',tags(e)],['Distance',dist(e.distance_ly)],['Position',e.ra!=null?dms(e.ra,e.dec):''],['Date',e.date],['Location',e.location],['Telescope',e.telescope],['Exposure',fmtExp(e.exposure_seconds)]]}[c]||[];
+ const how=[...(c=='nightsky'?[]:[['Camera',e.camera],['Lens',e.lens]]),['Focal length',e.focal_length_mm?`${e.focal_length_mm} mm`:''],['Aperture',e.f_number?`f/${e.f_number}`:''],['ISO',e.iso],['Sub-exposure',e.sub_exposure_seconds?fmtExp(e.sub_exposure_seconds):''],['Frames',e.frames],['Filters',e.filters],['Mosaic',e.mosaic===true?'Yes':e.mosaic],['Seeing',e.seeing],['Software',e.software],...(c=='deepsky'?[['Field of view',fov],['Constellation',e.constellation]]:[])];
+ $('#lb-info').innerHTML=`<h2>${esc(e.title)}</h2><p class="sub">${esc(e.designation||e.subject||'')}</p>`+facts(top)+
+  sec('Wiki',story+(story&&e.story_credit?`<p class="src">${esc(e.story_credit)}</p>`:''))+sec('How it was captured',facts(how))+
+  `<div class="btns">${onMap(e)?'<button id="lb-cosmos">Show on cosmos</button>':''}<button id="lb-x">Close</button></div>`;
  $('#lb').classList.add('open');$('#lb-x').onclick=closeLB;const info=$('#lb-info');$('#lb-x').focus({preventScroll:true});info.scrollTop=0;requestAnimationFrame(()=>{info.scrollTop=0});
- $('#lb-cosmos').onclick=()=>{closeLB();tab('cosmos');fly({ra:e.ra,dec:e.dec,fov:clamp(Math.max(e.width_deg,e.height_deg)*3.2,5,120)})}}
+ if(onMap(e))$('#lb-cosmos').onclick=()=>{closeLB();tab('cosmos');fly({ra:e.ra,dec:e.dec,fov:clamp(Math.max(e.width_deg,e.height_deg)*3.2,5,120)})}}
 function closeLB(){$('#lb').classList.remove('open');lbItem=null}
 $('#lb').addEventListener('click',e=>{if(e.target.id=='lb'||e.target.classList.contains('pic')||e.target.id=='lb-img')closeLB()});
 // Gallery: filter by catalog and type, sort by date, title, distance, catalog number or position.
@@ -285,20 +298,41 @@ const dts=d=>{d=String(d||'').trim();let m=d.match(/^(\d{4})[-\/.](\d{1,2})[-\/.
  m=d.match(/^(\d{1,2})[-\/.](\d{1,2})[-\/.](\d{4})/);if(m){let a=+m[1],b=+m[2];if(a>12)[a,b]=[b,a];return Date.UTC(+m[3],a-1,b)}return null};
 const dcmp=(x,y,dir)=>{const a=dts(x.date),b=dts(y.date);return a===null?(b===null?0:1):b===null?-1:dir*(a-b)};
 const num=(e,f)=>f=='messier'?e.messier:f=='caldwell'?e.caldwell:(e.messier||e.caldwell),big=v=>v>0?v:Infinity,cmp=(a,b)=>a==b?0:a<b?-1:1;
-const hay=e=>[e.title,e.designation,e.object_type,e.location,e.telescope,e.constellation,e.date,e.filters,e.story,e.messier&&`messier ${e.messier} m${e.messier}`,e.caldwell&&`caldwell ${e.caldwell} c${e.caldwell}`,dist(e.distance_ly)].flat().filter(Boolean).join(' ').toLowerCase();
+// ---- Collections: deepsky (every photo without a category is one), moon, planets and nightsky. Only deepsky photos are placed on the Cosmos map.
+const catOf=e=>e.category||'deepsky',onMap=e=>catOf(e)=='deepsky'&&e.ra!=null&&e.dec!=null;
+const PHASES=['New Moon','Waxing crescent','First Quarter','Waxing gibbous','Full Moon','Waning gibbous','Last Quarter','Waning crescent'],PLANET_ORDER=['Mercury','Venus','Mars','Jupiter','Saturn','Uranus','Neptune'];
+const SUB={moon:['Phase',e=>e.phase,PHASES],planets:['Planet',e=>e.subject,PLANET_ORDER],nightsky:['Type',e=>e.subject,[]]};
+const SORTS={full:[['new','Newest'],['old','Oldest'],['name','Title'],['dist','Distance, closest first'],['num','Catalog number'],['ra','Right ascension']],simple:[['new','Newest'],['old','Oldest']]};
+const CATLABEL={moon:'moon lunar',planets:'planet planets',nightsky:'night sky star trails'};
+let col='all';
+const hm=e=>e.time_local?String(e.time_local).slice(0,5):'',lt=e=>e.time_local?`${hm(e)}${e.timezone?' ('+e.timezone+')':''}`:'',utc=e=>e.datetime_utc?String(e.datetime_utc).slice(0,16).replace('T',' ')+' UTC':'',pct=v=>v==null?'':`${v}%`;
+// The lines shown under each photograph in the gallery.
+function cardLines(e){const c=catOf(e);
+ if(c=='moon')return[[e.phase,e.illumination_percent!=null&&Math.round(e.illumination_percent)+'%',e.supermoon&&'Supermoon'],[e.date,hm(e)],[e.location,e.telescope||e.lens||e.camera]];
+ if(c=='planets')return[[e.subject,e.apparent_diameter_arcsec&&e.apparent_diameter_arcsec+'″'],[e.date,hm(e)],[e.location,e.telescope]];
+ if(c=='nightsky')return[[e.subject],[e.date,fmtExp(e.exposure_seconds)],[e.location,e.camera]];
+ return[[e.designation,e.object_type],[dist(e.distance_ly)],[e.date,fmtExp(e.exposure_seconds)],[e.location,e.telescope]]}
+const hay=e=>[e.title,e.category,CATLABEL[catOf(e)],e.subject,e.phase,e.designation,e.object_type,e.location,e.telescope,e.camera,e.lens,e.software,e.seeing,e.direction,e.constellation,e.date,e.filters,e.story,e.messier&&`messier ${e.messier} m${e.messier}`,e.caldwell&&`caldwell ${e.caldwell} c${e.caldwell}`,dist(e.distance_ly)].flat().filter(Boolean).join(' ').toLowerCase();
+function setCol(c){col=c;for(const b of $('#cats').children)b.setAttribute('aria-pressed',b.dataset.c==c);$('#f-sub').innerHTML='';gallery()}
 function gallery(){const terms=$('#q').value.trim().toLowerCase().split(/\s+/).filter(Boolean),joined=terms.join(''),
  has=(h,t)=>/^\d+$/.test(t)?new RegExp('(^|\\D)'+t+'(\\D|$)').test(h):h.includes(t),
- match=e=>{if(!terms.length)return true;const h=hay(e);return terms.every(t=>has(h,t))||(terms.length>1&&h.replace(/\s+/g,'').includes(joined))},cf=$('#f-cat').value,tf=$('#f-type').value,k=$('#sort').value,ts=[...new Set(cat.map(e=>e.object_type).filter(Boolean))].sort();
+ match=e=>{if(!terms.length)return true;const h=hay(e);return terms.every(t=>has(h,t))||(terms.length>1&&h.replace(/\s+/g,'').includes(joined))},
+ deep=col=='all'||col=='deepsky',pool=cat.filter(e=>col=='all'||catOf(e)==col),cf=$('#f-cat').value,tf=$('#f-type').value,
+ ts=[...new Set(cat.filter(e=>catOf(e)=='deepsky').map(e=>e.object_type).filter(Boolean))].sort(),sd=SUB[col],sv0=$('#f-sub').value;
+ let subVals=[];if(sd){const present=[...new Set(pool.map(sd[1]).filter(Boolean))];subVals=[...sd[2].filter(v=>present.includes(v)),...present.filter(v=>!sd[2].includes(v)).sort()]}
  $('#f-type').innerHTML='<option value="all">All</option>'+ts.map(t=>`<option${t==tf?' selected':''}>${esc(t)}</option>`).join('');
- const a=cat.filter(e=>(cf=='all'||num(e,cf))&&(tf=='all'||!ts.includes(tf)||e.object_type==tf)&&match(e)),by={new:(x,y)=>dcmp(x,y,-1),old:(x,y)=>dcmp(x,y,1),
-  name:(x,y)=>x.title.localeCompare(y.title),ra:(x,y)=>x.ra-y.ra,dist:(x,y)=>cmp(big(x.distance_ly),big(y.distance_ly)),num:(x,y)=>cmp(big(num(x,cf)),big(num(y,cf)))};
+ $('#l-cat').hidden=$('#l-type').hidden=!deep;$('#l-sub').hidden=!(sd&&subVals.length>1);if(sd)$('#sub-name').textContent=sd[0];
+ $('#f-sub').innerHTML='<option value="all">All</option>'+subVals.map(v=>`<option${v==sv0?' selected':''}>${esc(v)}</option>`).join('');const sv=$('#f-sub').value;
+ const srt=$('#sort'),kind=deep?'f':'s';if(srt.dataset.k!=kind){srt.innerHTML=SORTS[deep?'full':'simple'].map(([v,l])=>`<option value="${v}">${l}</option>`).join('');srt.dataset.k=kind;srt.value='new'}
+ const k=srt.value,a=pool.filter(e=>(!deep||((cf=='all'||num(e,cf))&&(tf=='all'||!ts.includes(tf)||e.object_type==tf)))&&(!sd||sv=='all'||subVals.length<2||sd[1](e)==sv)&&match(e)),
+ by={new:(x,y)=>dcmp(x,y,-1),old:(x,y)=>dcmp(x,y,1),name:(x,y)=>x.title.localeCompare(y.title),ra:(x,y)=>cmp(x.ra??1e9,y.ra??1e9),dist:(x,y)=>cmp(big(x.distance_ly),big(y.distance_ly)),num:(x,y)=>cmp(big(num(x,cf)),big(num(y,cf)))};
  a.sort(by[k]);const ln=s=>s?`<span>${esc(s)}</span>`:'';
- $('#count').textContent=cat.length?(a.length<cat.length?`${a.length} of ${cat.length} photographs`:`${a.length} photograph${a.length>1?'s':''}`):'No photographs yet. See the README to add one.';
- $('#grid').innerHTML=a.map(e=>`<button class="card" data-i="${cat.indexOf(e)}"><img loading="lazy" src="${esc(U(e,'thumb'))}" alt="${esc(e.title)}"><b>${esc(e.title)}</b>`+
-  ln([e.designation,e.object_type].filter(Boolean).join(', '))+ln(dist(e.distance_ly))+ln([e.date,fmtExp(e.exposure_seconds)].filter(Boolean).join(', '))+ln([e.location,e.telescope].filter(Boolean).join(', '))+`</button>`).join('')||(cat.length?'<p class="empty">No photographs match your search.</p>':'')}
+ $('#count').textContent=!cat.length?'No photographs yet. See the README to add one.':a.length<pool.length?`${a.length} of ${pool.length} photographs`:`${pool.length} photograph${pool.length==1?'':'s'}`;
+ $('#grid').innerHTML=a.map(e=>`<button class="card" data-i="${cat.indexOf(e)}"><img loading="lazy" src="${esc(U(e,'thumb'))}" alt="${esc(e.title)}"><b>${esc(e.title)}</b>`+cardLines(e).map(l=>ln(l.filter(Boolean).join(', '))).join('')+`</button>`).join('')||(cat.length?(pool.length?'<p class="empty">No photographs match your search.</p>':'<p class="empty">No photographs in this collection yet.</p>'):'')}
 $('#grid').onclick=e=>{const c=e.target.closest('.card');if(c)openLB(cat[+c.dataset.i])};
 $('#q').oninput=gallery;$('#q').onkeydown=e=>{if(e.key=='Escape'&&e.target.value){e.target.value='';gallery()}};
-$('#f-cat').onchange=e=>{const s=$('#sort');if(e.target.value!='all')s.value='num';else if(s.value=='num')s.value='new';gallery()};$('#f-type').onchange=gallery;$('#sort').onchange=gallery;
+$('#cats').onclick=e=>{const b=e.target.closest('button');if(b)setCol(b.dataset.c)};
+$('#f-cat').onchange=e=>{const s=$('#sort');if(e.target.value!='all')s.value='num';else if(s.value=='num')s.value='new';gallery()};$('#f-type').onchange=gallery;$('#f-sub').onchange=gallery;$('#sort').onchange=gallery;
 function tab(t){document.body.dataset.tab=t;for(const n of['cosmos','gallery'])$('#t-'+n).setAttribute('aria-current',n==t);history.replaceState(null,'','#'+t);if(t=='cosmos')draw()}
 $('#t-cosmos').onclick=()=>tab('cosmos');$('#t-gallery').onclick=()=>tab('gallery');
 Promise.all([fetch('data/sky.json?v='+V).then(r=>r.json()),fetch('catalog.json',{cache:'no-cache'}).then(r=>r.json())]).then(([s,c])=>{sky=s;cat=c;gallery();tab(location.hash=='#gallery'?'gallery':'cosmos');resize()})

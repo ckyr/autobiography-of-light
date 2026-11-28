@@ -17,14 +17,26 @@ from pathlib import Path
 import requests
 from PIL import Image, ImageOps
 
+import skycalc   # Moon and planet calculations (needs astronomy-engine only when a Moon or planet photo is added)
+
 ROOT = Path(__file__).resolve().parent.parent
 IMPORT = ROOT / "import"
 API = "https://nova.astrometry.net/api"
-FIELDS = ["id", "title", "designation", "date", "hint", "distance_ly", "object_type", "messier", "caldwell", "constellation",
-          "location", "telescope", "exposure_seconds", "sub_exposure_seconds", "frames", "mosaic",
-          "filters", "story", "story_credit", "ra", "dec", "width_deg", "rotation", "flip"]
+FIELDS = ["id", "title", "category", "subject", "planet", "designation", "date", "time_local", "timezone", "hint", "distance_ly",
+          "object_type", "messier", "caldwell", "constellation", "location", "telescope", "camera", "lens", "focal_length_mm",
+          "f_number", "iso", "exposure_seconds", "sub_exposure_seconds", "frames", "mosaic", "filters", "software", "seeing",
+          "direction", "story", "story_credit", "ra", "dec", "width_deg", "rotation", "flip"]
+# values calculated for Moon and planet photos (you can override any of them in the JSON file)
+CALC = ["datetime_utc", "phase", "illumination_percent", "moon_age_days", "moon_distance_km", "moon_angular_diameter_arcmin",
+        "supermoon", "planet_distance_au", "planet_distance_million_km", "apparent_diameter_arcsec", "magnitude"]
+CATEGORIES = {"deepsky": "deepsky", "deep sky": "deepsky", "deep-sky": "deepsky", "moon": "moon", "lunar": "moon",
+              "planets": "planets", "planet": "planets", "planetary": "planets", "nightsky": "nightsky", "night sky": "nightsky",
+              "night-sky": "nightsky", "startrails": "nightsky", "star trails": "nightsky", "star-trails": "nightsky"}
 NUMS = {"distance_ly": float, "exposure_seconds": float, "sub_exposure_seconds": float, "frames": int, "messier": int,
-        "caldwell": int, "ra": float, "dec": float, "width_deg": float, "rotation": float}
+        "caldwell": int, "ra": float, "dec": float, "width_deg": float, "rotation": float, "focal_length_mm": float,
+        "f_number": float, "iso": int, "illumination_percent": float, "moon_age_days": float, "moon_distance_km": float,
+        "moon_angular_diameter_arcmin": float, "planet_distance_au": float, "planet_distance_million_km": float,
+        "apparent_diameter_arcsec": float, "magnitude": float}
 TYPES = {"G": "Galaxy", "GPair": "Galaxy", "GTrpl": "Galaxy", "GGroup": "Galaxy", "PN": "Planetary nebula", "HII": "Emission nebula",
          "EmN": "Emission nebula", "RfN": "Reflection nebula", "DrkN": "Dark nebula", "Neb": "Nebula", "SNR": "Supernova remnant",
          "OCl": "Open cluster", "GCl": "Globular cluster", "Cl+N": "Emission nebula", "*Ass": "Asterism", "*": "Star",
@@ -54,6 +66,126 @@ def ask_mirror(why, mode="ask"):
 
 def slug(s):
     return re.sub(r"[^a-z0-9]+", "-", s.lower()).strip("-") or "photo"
+
+
+def norm_category(c):
+    k = str(c or "deepsky").strip().lower()
+    if k not in CATEGORIES:
+        raise RuntimeError(f"Unknown category '{c}'. Use deepsky, moon, planets or nightsky.")
+    return CATEGORIES[k]
+
+
+def canon(k):
+    """JSON keys may carry a note after ' - ' (for example 'date - YYYY-MM-DD'); only the part before it is the field name."""
+    return str(k).split(" - ")[0].strip().lower()
+
+
+def exif_info(img):
+    """Camera details the camera wrote into the JPEG (when your editing program kept them)."""
+    out = {}
+    try:
+        ex = img.getexif()
+        sub = ex.get_ifd(0x8769)
+    except Exception:
+        return out
+
+    def num(v):
+        try:
+            return float(v)
+        except Exception:
+            return None
+    make, model = str(ex.get(0x010F) or "").strip(), str(ex.get(0x0110) or "").strip()
+    if model:
+        out["camera"] = model if model.lower().startswith(make.lower()) else f"{make} {model}".strip()
+    if str(sub.get(0xA434) or "").strip():
+        out["lens"] = str(sub.get(0xA434)).strip()
+    if num(sub.get(0x920A)):
+        out["focal_length_mm"] = round(num(sub.get(0x920A)), 1)
+    if num(sub.get(0x829D)):
+        out["f_number"] = round(num(sub.get(0x829D)), 1)
+    iso = sub.get(0x8827)
+    iso = iso[0] if isinstance(iso, (tuple, list)) and iso else iso
+    if iso:
+        out["iso"] = int(iso)
+    if num(sub.get(0x829A)):
+        out["exposure"] = num(sub.get(0x829A))
+    mt = re.match(r"(\d{4})[:-](\d\d)[:-](\d\d)[ T](\d\d:\d\d:\d\d)", str(sub.get(0x9003) or ""))   # capture time, not the editing time
+    if mt:
+        out["date"], out["time_local"] = f"{mt[1]}-{mt[2]}-{mt[3]}", mt[4]
+    off = str(sub.get(0x9011) or "").strip()
+    if re.match(r"^[+-]\d\d:\d\d$", off):
+        out["timezone"] = off
+    return out
+
+
+def _tpl(*rows):
+    return {(f"{k} - {note}" if note else k): v for k, note, v in rows}
+
+
+_STORY = (("story", "text shown under Wiki; write \\n\\n for a new paragraph", ""),
+          ("story_credit", "small credit line under the text, if it is not your own", ""))
+_WHEN = (("date", "YYYY-MM-DD, the LOCAL date where you were; used for the calculations", ""),
+         ("time_local", "HH:MM:SS, 24-hour LOCAL clock time; used for the calculations", ""),
+         ("timezone", "IANA name such as America/New_York (best: handles daylight saving) or a UTC offset such as -05:00; used for the calculations", ""))
+_GEAR = (("location", "place name, for example Williamstown, MA (not used for the calculations)", ""),
+         ("telescope", "telescope or lens, free text", ""), ("camera", "free text", ""),
+         ("focal_length_mm", "millimetres (with a barlow or reducer, the effective focal length)", ""),
+         ("f_number", "number only: write 8 for f/8", ""), ("iso", "whole number", ""))
+_SHOTS = (("sub_exposure_seconds", "ONE frame, in seconds; for 1/500 s write 0.002", ""),
+          ("frames", "number of frames stacked, whole number", ""),
+          ("exposure_seconds", "TOTAL exposure in seconds; optional, it is calculated from frames x sub_exposure_seconds", ""))
+
+
+def template_for(category):
+    if category == "moon":
+        return _tpl(("_read_me", "", "Moon photo. The phase, illumination, age, distance and supermoon flag are CALCULATED from date, time_local and timezone "
+                     "(they are the same wherever you stand, so location is not needed). Empty fields are ignored. To override a calculated value, add the key yourself "
+                     "(phase, illumination_percent, moon_age_days, moon_distance_km, moon_angular_diameter_arcmin, supermoon). Needs: pip install astronomy-engine. "
+                     "EXIF (camera, lens, ISO, aperture, shutter, time) is read from the JPEG when present and only fills fields you left empty."),
+                    ("title", "name shown on the site, for example Waxing gibbous over the lake", ""),
+                    ("id", "optional unique name: letters, numbers and dashes", ""), ("category", "moon", "moon"),
+                    *_WHEN, *_GEAR, *_SHOTS, ("filters", "text or a list", ""), ("mosaic", "for example 2 x 2 panels", ""),
+                    ("software", "processing software", ""), *_STORY)
+    if category == "planets":
+        return _tpl(("_read_me", "", "Planet photo. The distance, apparent size, illuminated percent, magnitude and constellation are CALCULATED from planet, date, time_local and timezone "
+                     "(the same wherever you stand, so location is not needed). Empty fields are ignored. Needs: pip install astronomy-engine. Apparent size is the planet's disk without Saturn's rings."),
+                    ("title", "name shown on the site, for example Jupiter with Io", ""),
+                    ("id", "optional unique name: letters, numbers and dashes", ""), ("category", "planets", "planets"),
+                    ("planet", "Mercury, Venus, Mars, Jupiter, Saturn, Uranus or Neptune; used for the calculations", ""),
+                    *_WHEN, *_GEAR, *_SHOTS, ("filters", "for example RGB or IR-pass; text or a list", ""),
+                    ("seeing", "free text, for example 3/5 or 1.8 arcsec", ""), ("software", "processing software", ""), *_STORY)
+    if category == "nightsky":
+        return _tpl(("_read_me", "", "Night-sky photo, including star trails. EXIF (camera, lens, focal length, aperture, ISO, shutter speed and capture time) is read from the JPEG when "
+                     "present and only fills fields you left empty. For star trails made in StarStaX enter frames and sub_exposure_seconds; the total time is calculated unless you enter "
+                     "exposure_seconds. Nothing is calculated from the sky and the photo is not placed on the Cosmos map."),
+                    ("title", "name shown on the site", ""), ("id", "optional unique name: letters, numbers and dashes", ""),
+                    ("category", "nightsky", "nightsky"),
+                    ("subject", "what it shows: Star trails, Milky Way, Meteors, Aurora, Constellations, Landscape or Other", ""),
+                    ("date", "YYYY-MM-DD, the LOCAL date where you were", ""), ("time_local", "HH:MM:SS, 24-hour local clock time when the exposure or sequence started", ""),
+                    ("timezone", "IANA name such as America/New_York, or a UTC offset such as -05:00", ""),
+                    ("location", "place name", ""), ("camera", "free text", ""), ("lens", "free text", ""),
+                    ("focal_length_mm", "millimetres", ""), ("f_number", "number only: write 2.8 for f/2.8", ""), ("iso", "whole number", ""),
+                    ("sub_exposure_seconds", "ONE frame, in seconds", ""), ("frames", "number of frames, whole number", ""),
+                    ("exposure_seconds", "TOTAL time in seconds; optional, it is calculated from frames x sub_exposure_seconds", ""),
+                    ("direction", "where the camera pointed, free text, for example North toward Polaris", ""),
+                    ("software", "for example StarStaX", ""), *_STORY)
+    return _tpl(("_read_me", "", "Deep-sky photo. Position, size and rotation come from astrometry.net, and the object type and Messier/Caldwell numbers from the object catalog. "
+                 "Empty fields are ignored. The notes after ' - ' in the keys are ignored too."),
+                ("title", "name shown on the site, for example Andromeda Galaxy", ""),
+                ("id", "optional unique name: letters, numbers and dashes, for example m31-2025-10", ""), ("category", "deepsky", "deepsky"),
+                ("designation", "catalog name, for example M31 or NGC 7000", ""),
+                ("date", "YYYY-MM-DD, capture date", ""), ("distance_ly", "light years, plain number", ""),
+                ("location", "place name", ""), ("telescope", "telescope and camera, free text", ""), ("filters", "text or a list", ""),
+                ("exposure_seconds", "TOTAL exposure in seconds", ""), ("sub_exposure_seconds", "ONE frame, in seconds", ""),
+                ("frames", "number of frames, whole number", ""), ("mosaic", "for example 2 x 2 panels", ""), *_STORY,
+                ("hint", "object name that speeds up solving, for example M31", ""),
+                ("object_type", "filled in automatically; type here to override", ""),
+                ("messier", "number only; filled in automatically", ""), ("caldwell", "number only; filled in automatically", ""),
+                ("constellation", "name, optional", ""),
+                ("ra", "decimal degrees (J2000); only to skip astrometry.net", ""), ("dec", "decimal degrees (J2000); only to skip astrometry.net", ""),
+                ("width_deg", "degrees, width of the picture on the sky; only to skip astrometry.net", ""),
+                ("rotation", "degrees clockwise, as astrometry.net reports it; only to skip astrometry.net", ""),
+                ("flip", "true or false; true shows a mirror-image photo flipped", ""))
 
 
 def blank(v):
@@ -135,6 +267,74 @@ def solve(path, key, hint, log):
     return c["ra"], c["dec"], c["pixscale"], c["orientation"], c.get("parity")
 
 
+def add_other(image, m, category, max_size, log):
+    """Moon, planet and night-sky photos: no plate solving, no place on the Cosmos map."""
+    orig = Image.open(image)
+    im = ImageOps.exif_transpose(orig).convert("RGB")
+    title = m.get("title") or image.stem
+    pid = slug(m.get("id") or title)
+    if category in ("moon", "nightsky"):   # camera details the JPEG carries; they only fill what you left empty
+        ex = exif_info(orig)
+        for k in ("camera", "lens", "focal_length_mm", "f_number", "iso"):
+            if k in ex:
+                m.setdefault(k, ex[k])
+        if "exposure" in ex:
+            if m.get("frames", 1) > 1:
+                m.setdefault("sub_exposure_seconds", ex["exposure"])
+            else:
+                m.setdefault("exposure_seconds", ex["exposure"])
+        mine = skycalc.norm_date(m.get("date"))
+        if "date" in ex and not mine:
+            m["date"] = ex["date"]
+        if not mine or mine == ex.get("date"):   # the camera's clock only helps when it is about the same day you named
+            for k in ("time_local", "timezone"):
+                if k in ex:
+                    m.setdefault(k, ex[k])
+    if "exposure_seconds" not in m and "sub_exposure_seconds" in m and "frames" in m:
+        m["exposure_seconds"] = m["sub_exposure_seconds"] * m["frames"]
+    iso_date = skycalc.norm_date(m.get("date"))
+    if m.get("date") and not iso_date:
+        log(f"  WARNING: could not read the date '{m['date']}'. Use YYYY-MM-DD.")
+    m["date"] = iso_date or m.get("date")
+    if category == "moon":
+        m.setdefault("subject", "Moon")
+    if category == "planets":
+        name = str(m.pop("planet", None) or m.get("subject") or "").strip().title()
+        if not name:
+            raise RuntimeError("Planet photos need a planet name (Mercury, Venus, Mars, Jupiter, Saturn, Uranus or Neptune).")
+        m["subject"] = name
+    if iso_date and (category in ("moon", "planets") or m.get("time_local")):
+        dt, notes = skycalc.to_utc(iso_date, m.get("time_local"), m.get("timezone"))
+        for n in notes:
+            log(f"  Note: {n}.")
+        m["datetime_utc"] = dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+        if category in ("moon", "planets"):
+            try:
+                calc = skycalc.moon_info(dt) if category == "moon" else skycalc.planet_info(m["subject"], dt)
+                for k, v in calc.items():
+                    m.setdefault(k, v)
+                log("  Calculated: " + ", ".join(f"{k} {v}" for k, v in calc.items() if k != "constellation") + f", in {calc.get('constellation', '?')}.")
+            except ImportError:
+                log("  Moon/planet calculations skipped: run 'pip install astronomy-engine' and import the photo again (or fill the values in by hand).")
+    elif category in ("moon", "planets"):
+        log("  No date given, so nothing could be calculated.")
+    web = im.copy(); web.thumbnail((max_size, max_size))
+    thumb = im.copy(); thumb.thumbnail((400, 400))
+    (ROOT / "photos" / "thumbs").mkdir(parents=True, exist_ok=True)
+    web.save(ROOT / "photos" / f"{pid}.jpg", quality=88, optimize=True, progressive=True)
+    thumb.save(ROOT / "photos" / "thumbs" / f"{pid}.jpg", quality=82, optimize=True)
+    entry = {"id": pid, "title": title, "category": category}
+    for k in FIELDS + CALC:
+        if k not in ("id", "title", "category", "planet", "hint", "ra", "dec", "width_deg", "rotation", "flip") and not blank(m.get(k)):
+            entry[k] = m[k]
+    entry.update(v=int(time.time()), image=f"photos/{pid}.jpg", thumb=f"photos/thumbs/{pid}.jpg")
+    cp = ROOT / "catalog.json"
+    cat = [c for c in json.loads(cp.read_text()) if c["id"] != pid] + [entry]
+    cp.write_text(json.dumps(cat, indent=1))
+    log(f"  Added '{title}' ({category}, id {pid}), dated {entry.get('date') or 'unknown'}. The catalog has {len(cat)} photographs.")
+    return entry
+
+
 def add_photo(image, meta, key=None, max_size=2400, log=print, check=False, mirror="ask"):
     image = Path(image)
     m = {k: v for k, v in meta.items() if not blank(v)}
@@ -143,6 +343,10 @@ def add_photo(image, meta, key=None, max_size=2400, log=print, check=False, mirr
     for k, f in NUMS.items():
         if k in m:
             m[k] = f(m[k])
+    category = norm_category(m.get("category"))
+    m["category"] = category
+    if category != "deepsky":
+        return add_other(image, m, category, max_size, log)
     orig = Image.open(image)
     im = ImageOps.exif_transpose(orig).convert("RGB")  # saving without EXIF also strips GPS data
     title = m.get("title") or m.get("designation") or image.stem
@@ -207,7 +411,7 @@ def add_photo(image, meta, key=None, max_size=2400, log=print, check=False, mirr
         if obj[6]: m.setdefault("caldwell", obj[6])
     if "exposure_seconds" not in m and "sub_exposure_seconds" in m and "frames" in m:
         m["exposure_seconds"] = m["sub_exposure_seconds"] * m["frames"]
-    m["date"] = m.get("date") or exif_date(orig)
+    m["date"] = skycalc.norm_date(m.get("date")) or m.get("date") or exif_date(orig)   # always stored as YYYY-MM-DD
     (ROOT / "photos" / "thumbs").mkdir(parents=True, exist_ok=True)
     web.save(ROOT / "photos" / f"{pid}.jpg", quality=88, optimize=True, progressive=True)
     thumb.save(ROOT / "photos" / "thumbs" / f"{pid}.jpg", quality=82, optimize=True)
@@ -246,7 +450,7 @@ def sidecar(image):
     if not p.exists():
         return {}
     try:
-        return {k.lower(): v for k, v in json.loads(p.read_text(encoding="utf-8")).items()}
+        return {canon(k): v for k, v in json.loads(p.read_text(encoding="utf-8")).items() if not str(k).startswith("_")}
     except ValueError as e:
         raise RuntimeError(f"{p.name} is not valid JSON ({e}). Check commas and quotes.")
 
@@ -255,7 +459,7 @@ def main():
     a = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     a.add_argument("image", nargs="?")
     a.add_argument("--all", action="store_true", help="add every photo in the import folder")
-    a.add_argument("--template", metavar="NAME", help="create import/NAME.json to fill in")
+    a.add_argument("--template", metavar="NAME", help="create import/NAME.json to fill in (with --category moon, planets or nightsky for those kinds)")
     a.add_argument("--list", action="store_true"); a.add_argument("--remove", metavar="ID")
     a.add_argument("--remove-samples", action="store_true", help="remove all sample photographs (ids starting with sample-)")
     a.add_argument("--max-size", type=int, default=2400); a.add_argument("--push", action="store_true"); a.add_argument("--check", action="store_true", help="run the optional star check that looks for mirrored photos (needs numpy)"); a.add_argument("--no-check", action="store_true", help=argparse.SUPPRESS)
@@ -272,8 +476,8 @@ def main():
         if o.template:
             IMPORT.mkdir(exist_ok=True)
             p = IMPORT / (slug(o.template) + ".json")
-            p.write_text(json.dumps({k: "" for k in FIELDS}, indent=2))
-            return print(f"Created {p}. Fill in what you know and delete nothing: empty fields are ignored.")
+            p.write_text(json.dumps(template_for(norm_category(o.category)), indent=2, ensure_ascii=False), encoding="utf-8")
+            return print(f"Created {p}. Fill in what you know and delete nothing: empty fields are ignored. (Add --category moon, planets or nightsky for the other kinds.)")
         if o.remove_samples:
             ids = [c["id"] for c in json.loads((ROOT / "catalog.json").read_text()) if c["id"].startswith("sample-")]
             for i in ids:

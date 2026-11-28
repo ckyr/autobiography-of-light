@@ -459,28 +459,6 @@
   "thumb": "photos/thumbs/moon18nov2026.jpg"
  },
  {
-  "id": "moon19nov2026",
-  "title": "Moon - 19Nov2026",
-  "category": "moon",
-  "subject": "Moon",
-  "date": "2026-11-19",
-  "time_local": "20:00:00",
-  "timezone": "America/New_York",
-  "constellation": "Pisces",
-  "location": "Irvington, NY",
-  "telescope": "Vaonis Vespera Pro",
-  "software": "Seti Astro Pro",
-  "datetime_utc": "2026-11-20T01:00:00Z",
-  "phase": "Waxing gibbous",
-  "illumination_percent": 74.8,
-  "moon_age_days": 10.7,
-  "moon_distance_km": 383669,
-  "moon_angular_diameter_arcmin": 31.1,
-  "v": 1795876290,
-  "image": "photos/moon19nov2026.jpg",
-  "thumb": "photos/thumbs/moon19nov2026.jpg"
- },
- {
   "id": "moon24nov2026",
   "title": "Moon - 24Nov2026",
   "category": "moon",
@@ -502,5 +480,27 @@
   "v": 1795876290,
   "image": "photos/moon24nov2026.jpg",
   "thumb": "photos/thumbs/moon24nov2026.jpg"
+ },
+ {
+  "id": "moon19nov2026",
+  "title": "Moon - 19Nov2026",
+  "category": "moon",
+  "subject": "Moon",
+  "date": "2026-11-19",
+  "time_local": "20:00:00",
+  "timezone": "America/New_York",
+  "constellation": "Pisces",
+  "location": "Irvington, NY",
+  "telescope": "Vaonis Vespera Pro",
+  "software": "Seti Astro Pro",
+  "datetime_utc": "2026-11-20T01:00:00Z",
+  "phase": "Waxing gibbous",
+  "illumination_percent": 74.8,
+  "moon_age_days": 10.7,
+  "moon_distance_km": 383669,
+  "moon_angular_diameter_arcmin": 31.1,
+  "v": 1795877273,
+  "image": "photos/moon19nov2026.jpg",
+  "thumb": "photos/thumbs/moon19nov2026.jpg"
  }
 ]
